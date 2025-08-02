@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg-info/
+*.egg
+
+# Django
+db.sqlite3
+*.sqlite3
+media/
+*.log
+
+# ENV
+.env
+venv/
+.env.*
+
+# Migrations (optional — keep if you want to track them)
+**/migrations/__pycache__/
+# Uncomment below to ignore all migrations
+# **/migrations/
+
+# VS Code
+.vscode/
+
+# OS Files
+.DS_Store
+Thumbs.db
