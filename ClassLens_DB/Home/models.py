@@ -1,5 +1,5 @@
 from django.db import models
-from pgvector.django import VectorField, IvfflatIndex
+from pgvector.django import VectorField, IvfflatIndex, HnswIndex
 
 class Department(models.Model):
     name = models.TextField(unique=True, null=False)
@@ -29,18 +29,18 @@ class Student(models.Model):
         Department, 
         on_delete=models.CASCADE, 
     )
-    face_embedding = VectorField(dimensions=4096, null=True, blank=True)
+    face_embedding = VectorField(dimensions=512, null=True, blank=True)
     notification_token = models.TextField(null=True, blank=True)
     class Meta:
-        # indexes = [
-        #     IvfflatIndex(
-        #         name='student_face_embedding_idx',
-        #         fields=['face_embedding'],
-        #         lists=100,
-        #         opclasses=['vector_l2_ops']
-        #     )   
-        # ]
-        pass
+        indexes = [
+           HnswIndex(
+                name='student_face_embedding_idx',
+                fields=['face_embedding'],
+                m=16,                 # number of bi‐directional links per node
+                ef_construction=200,  # controls recall vs build time
+                opclasses=['vector_l2_ops']
+            ),
+        ]
     def __str__(self):
         return f"{self.name} ({self.prn})"
     
