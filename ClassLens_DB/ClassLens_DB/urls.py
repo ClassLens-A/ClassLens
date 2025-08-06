@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from DatabaseAdminApp.views import embeddings
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path('getFace/',embeddings,name='embeddings'),
 ]

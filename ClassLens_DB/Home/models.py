@@ -20,7 +20,7 @@ class Teacher(models.Model):
         return self.name
     
 class Student(models.Model):
-    prn = models.IntegerField(unique=True, null=False)
+    prn = models.BigIntegerField(unique=True, null=False)
     name = models.TextField(null=False)
     email = models.EmailField(unique=True, null=False)
     password_hash = models.TextField(null=False)
@@ -36,8 +36,8 @@ class Student(models.Model):
            HnswIndex(
                 name='student_face_embedding_idx',
                 fields=['face_embedding'],
-                m=16,                 # number of bi‐directional links per node
-                ef_construction=200,  # controls recall vs build time
+                m=16,                 
+                ef_construction=200,  
                 opclasses=['vector_l2_ops']
             ),
         ]
