@@ -77,10 +77,10 @@ WSGI_APPLICATION = "ClassLens_DB.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "ClassLens_DB",
-        "USER": "postgres",
-        "PASSWORD": "yash@12345",
-        "HOST": "localhost",
+        "NAME": "postgres",
+        "USER": "msu_spartans",
+        "PASSWORD": "Test@2211",
+        "HOST": "classlens-msu.postgres.database.azure.com",
         "PORT": "5432",
     }
 }
