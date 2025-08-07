@@ -4,5 +4,4 @@ from .models import Department
 class DepartmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Department
-        fields = '__all__'
-
+        fields = ['name']
