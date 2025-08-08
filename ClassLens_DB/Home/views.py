@@ -33,7 +33,7 @@ def registerNewStudent(request,*args,**kwargs):
             image=Image.open(photo)
             image=image.convert('RGB')
             img_arr=np.array(image)
-            image_embedding = DeepFace.represent(img_path =img_arr,model_name = 'Facenet512',detector_backend = 'retinaface')[0]["embedding"]
+            image_embedding = DeepFace.represent(img_path =img_arr,model_name = 'Facenet512',detector_backend = 'retinaface',enforce_detection=True)[0]["embedding"]
             department=get_object_or_404(Department,name=request.POST.get('department'))  
 
             student=Student.objects.create(
@@ -47,6 +47,8 @@ def registerNewStudent(request,*args,**kwargs):
             )
             student.save()
             return Response({'message': 'Student registered successfully'}, status=status.HTTP_201_CREATED)
+        except ValueError as ve:
+            return Response({'error': str(ve)+"Invalid photo uploaded"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             traceback.print_exc() 
             return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
