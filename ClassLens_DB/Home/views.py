@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from .models import Department,Student,Teacher
 from .serializers import DepartmentSerializer
 from rest_framework.parsers import MultiPartParser
+from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404
 import traceback
 
@@ -56,19 +57,34 @@ def registerNewStudent(request,*args,**kwargs):
 
 @api_view(['POST'])
 def registerNewTeacher(request,*args,**kwargs):
-    if request.method == 'POST':
-        try : 
-            teacher=Teacher.objects.create(
-                name=request.POST.get('name'),
-                email=request.POST.get('email'),
-                password_hash=request.POST.get('password_hash'),
-                department=get_object_or_404(Department,name=request.POST.get('department'))
+
+    data = request.data
+
+    required_fields = ['name', 'email', 'password', 'departmentID']
+    if not all(field in data for field in required_fields):
+        return Response(
+            {'error': 'Missing one or more required fields.'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try : 
+        if Teacher.objects.filter(email=data['email']).exists():
+            return Response(
+                {'error': 'Teacher with this email already exists.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            teacher.save()
-            return Response({'message': 'Teacher registered successfully'}, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            traceback.print_exc() 
-            return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        department = get_object_or_404(Department,id=data['departmentID'])
+        teacher = Teacher.objects.create(
+            name=data['name'],
+            email=data['email'],
+            password_hash=make_password(data['password']),
+            department=department
+        )
+        return Response({'message': 'Teacher registered successfully'}, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        traceback.print_exc() 
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @api_view(['POST'])
