@@ -24,7 +24,7 @@ classlens-vnv
 # Migrations (optional — keep if you want to track them)
 **/migrations/__pycache__/
 # Uncomment below to ignore all migrations
-**/migrations/
+**/migrations/*.py
 
 # VS Code
 .vscode/

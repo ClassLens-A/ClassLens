@@ -3,7 +3,6 @@ from pgvector.django import VectorField, IvfflatIndex, HnswIndex
 
 class Department(models.Model):
     name = models.TextField(unique=True, null=False)
-    
     def __str__(self):
         return self.name
 
@@ -45,7 +44,7 @@ class Student(models.Model):
         return f"{self.name} ({self.prn})"
     
 class Subject(models.Model):
-    code = models.TextField(unique=True, null=False)
+    code = models.TextField(unique=True, null=False,default="")
     name = models.TextField(null=False)
     def __str__(self):
         return f"{self.name}"
