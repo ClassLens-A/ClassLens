@@ -52,9 +52,10 @@ class Subject(models.Model):
 class SubjectFromDept(models.Model):
     department = models.ForeignKey(Department, on_delete=models.CASCADE)
     year = models.IntegerField(null=False)
-    subject = models.ManyToManyField(Subject,null=False)    
+    subject = models.ManyToManyField(Subject,null=False)
+    semester=models.IntegerField(null=False)    
     class Meta:
-        unique_together = ('department', 'year')
+        unique_together = ('department', 'year','semester')
 
     def __str__(self):
         return f"{self.department} - {self.year}"

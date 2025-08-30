@@ -4,7 +4,7 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department,Student,Teacher
+from .models import Department,Student,Teacher,SubjectFromDept
 from .serializers import DepartmentSerializer
 from rest_framework.parsers import MultiPartParser
 from django.shortcuts import get_object_or_404
@@ -29,7 +29,6 @@ def registerNewStudent(request,*args,**kwargs):
             return Response({'error': 'No photo uploaded'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            print("Received photo:", photo.name)
             image=Image.open(photo)
             image=image.convert('RGB')
             img_arr=np.array(image)
@@ -49,7 +48,7 @@ def registerNewStudent(request,*args,**kwargs):
             return Response({'message': 'Student registered successfully'}, status=status.HTTP_201_CREATED)
         except Exception as e:
             traceback.print_exc() 
-            return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+            return Response({"Error": str(e)}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @api_view(['POST'])
@@ -94,6 +93,23 @@ def validateTeacher(request,*args,**kwargs):
             return Response({'message': 'Teacher validated successfully', 'teacher_id': teacher.id}, status=status.HTTP_200_OK)
         except Teacher.DoesNotExist:
             return Response({'error': 'Invalid email or password'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            traceback.print_exc()
+            return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        
+
+@api_view(['POST'])
+def get_subject_details(request,*args,**kwargs):
+    if request.method == 'POST':
+        department_name = request.data.get('department')
+        year = request.data.get('year')
+        semester = request.data.get('semester')
+        try:
+            department = get_object_or_404(Department, name=department_name)
+            subject_from_dept = get_object_or_404(SubjectFromDept, department=department, year=year, semester=semester)
+            subjects = subject_from_dept.subject.all()
+            subject_list = [{'code': subject.code, 'name': subject.name} for subject in subjects]
+            return Response({'subjects': subject_list}, status=status.HTTP_200_OK)
         except Exception as e:
             traceback.print_exc()
             return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
