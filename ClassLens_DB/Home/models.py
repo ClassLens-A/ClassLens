@@ -9,7 +9,7 @@ class Department(models.Model):
 class Teacher(models.Model):
     name = models.TextField(null=False)
     email = models.EmailField(unique=True, null=False)
-    password_hash = models.TextField(null=False)
+    password_hash = models.TextField(null=True)
     department = models.ForeignKey(
         Department, 
         on_delete=models.CASCADE, 
