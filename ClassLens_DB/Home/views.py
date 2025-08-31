@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from .models import Department,Student,Teacher
 from .serializers import DepartmentSerializer
 from rest_framework.parsers import MultiPartParser
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password,check_password
 from django.shortcuts import get_object_or_404
 import traceback
 import random
@@ -109,17 +109,24 @@ def validateStudent(request,*args,**kwargs):
 
 @api_view(['POST'])
 def validateTeacher(request,*args,**kwargs):
-    if request.method == 'POST':
-        email = request.data.get('email')
-        password_hash = request.data.get('password_hash')
-        try:
-            teacher = Teacher.objects.get(email=email, password_hash=password_hash)
+   
+    email = request.data.get('email')
+    password = request.data.get('password')
+
+    if email is None or password is None:
+        return Response({"detail": "Email and Password are required"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+
+        teacher = Teacher.objects.get(email=email)
+        if not check_password(password, teacher.password_hash):
+            return Response({'error': 'Invalid password'}, status=status.HTTP_400_BAD_REQUEST)      
+        else: 
             return Response({'message': 'Teacher validated successfully', 'teacher_id': teacher.id}, status=status.HTTP_200_OK)
-        except Teacher.DoesNotExist:
-            return Response({'error': 'Invalid email or password'}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            traceback.print_exc()
-            return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    except Teacher.DoesNotExist:
+        return Response({'error': 'Invalid email or user not registered'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         
 
 @api_view(['POST'])
