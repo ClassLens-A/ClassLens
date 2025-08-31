@@ -10,6 +10,11 @@ from rest_framework.parsers import MultiPartParser
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import get_object_or_404
 import traceback
+import random
+from django.core.cache import cache
+from django.core.mail import send_mail
+from django.conf import settings
+
 
 @api_view(['GET'])
 def getDepartments(request):
@@ -115,3 +120,93 @@ def validateTeacher(request,*args,**kwargs):
         except Exception as e:
             traceback.print_exc()
             return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        
+
+@api_view(['POST'])
+def send_otp(request, *args, **kwargs):
+    try:
+        email = request.data.get("email")
+        otp = random.randint(1000, 9999)
+
+        if email is None:
+            return Response({"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        cache.set(email, otp,120)
+
+        subject = "Your ClassLens OTP Verification Code"
+
+        plain_message = f"""
+        Hello,
+
+        Your One Time Password for ClassLens is: {otp}
+
+        This code is valid for 2 minutes. For your security, please do not share it with anyone.
+
+        If you did not request this, you can safely ignore this email.
+
+        Thank you,
+        The ClassLens Team
+        """
+
+        html_message = f"""
+        <p>Hello,</p>
+        <p>Your One Time Password for ClassLens is: <strong>{otp}</strong></p>
+        <p>This code is valid for <strong>2 minutes</strong>. For your security, please do not share it with anyone.</p>
+        <p>If you did not request this, you can safely ignore this email.</p>
+        <br>
+        <p>Thank you,<br>
+        <strong>The ClassLens Team</strong></p>
+        """
+
+        mail = send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[email],
+            fail_silently=False,  
+            html_message=html_message  
+        )
+
+        return Response({"message": "OTP sent successfully"}, status=200)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['POST'])
+def verify_otp(request, *args, **kwargs):
+    try:
+        email = request.data.get("email")
+        otp = request.data.get("otp")
+        if email is None or otp is None:
+            return Response({"detail": "Email and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached_otp = cache.get(email)
+
+        if cached_otp is None or cached_otp != int(otp):
+            return Response({"detail": "Invalid or expired OTP"}, status=status.HTTP_400_BAD_REQUEST)
+        cache.delete(email)
+        return Response({"message": "OTP verified successfully"}, status=200)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@api_view(['POST'])
+def set_password(request, *args, **kwargs):
+    try:
+        email = request.data.get("email")
+        password = request.data.get("password")
+        if email is None or password is None:
+            return Response({"detail": "Email and Password are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        teacher = Teacher.objects.get(email=email)
+        teacher.password_hash = make_password(password)
+        teacher.save()
+        return Response({"message": "password set successfully"}, status=200)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
