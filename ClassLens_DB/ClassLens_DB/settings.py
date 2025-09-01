@@ -19,13 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = "classlens2025@gmail.com"
-EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 
 
 # Quick-start development settings - unsuitable for production
