@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "Home",
     "DatabaseAdminApp",
+    "rest_framework",
 ]
 
 MIDDLEWARE = [
