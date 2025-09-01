@@ -18,6 +18,8 @@ media/
 .env
 venv/
 .env.*
+classlens-vnv
+
 
 # Migrations (optional — keep if you want to track them)
 **/migrations/__pycache__/

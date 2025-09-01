@@ -7,8 +7,14 @@ from rest_framework.response import Response
 from .models import Department,Student,Teacher,SubjectFromDept
 from .serializers import DepartmentSerializer
 from rest_framework.parsers import MultiPartParser
+from django.contrib.auth.hashers import make_password,check_password
 from django.shortcuts import get_object_or_404
 import traceback
+import random
+from django.core.cache import cache
+from django.core.mail import send_mail
+from django.conf import settings
+
 
 @api_view(['GET'])
 def getDepartments(request):
@@ -32,7 +38,7 @@ def registerNewStudent(request,*args,**kwargs):
             image=Image.open(photo)
             image=image.convert('RGB')
             img_arr=np.array(image)
-            image_embedding = DeepFace.represent(img_path =img_arr,model_name = 'Facenet512',detector_backend = 'retinaface')[0]["embedding"]
+            image_embedding = DeepFace.represent(img_path =img_arr,model_name = 'Facenet512',detector_backend = 'retinaface',enforce_detection=True)[0]["embedding"]
             department=get_object_or_404(Department,name=request.POST.get('department'))  
 
             student=Student.objects.create(
@@ -46,6 +52,8 @@ def registerNewStudent(request,*args,**kwargs):
             )
             student.save()
             return Response({'message': 'Student registered successfully'}, status=status.HTTP_201_CREATED)
+        except ValueError as ve:
+            return Response({'error': str(ve)+"Invalid photo uploaded"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             traceback.print_exc() 
             return Response({"Error": str(e)}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
@@ -53,19 +61,34 @@ def registerNewStudent(request,*args,**kwargs):
 
 @api_view(['POST'])
 def registerNewTeacher(request,*args,**kwargs):
-    if request.method == 'POST':
-        try : 
-            teacher=Teacher.objects.create(
-                name=request.POST.get('name'),
-                email=request.POST.get('email'),
-                password_hash=request.POST.get('password_hash'),
-                department=get_object_or_404(Department,name=request.POST.get('department'))
+
+    data = request.data
+
+    required_fields = ['name', 'email', 'password', 'departmentID']
+    if not all(field in data for field in required_fields):
+        return Response(
+            {'error': 'Missing one or more required fields.'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try : 
+        if Teacher.objects.filter(email=data['email']).exists():
+            return Response(
+                {'error': 'Teacher with this email already exists.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            teacher.save()
-            return Response({'message': 'Teacher registered successfully'}, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            traceback.print_exc() 
-            return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        department = get_object_or_404(Department,id=data['departmentID'])
+        teacher = Teacher.objects.create(
+            name=data['name'],
+            email=data['email'],
+            password_hash=make_password(data['password']),
+            department=department
+        )
+        return Response({'message': 'Teacher registered successfully'}, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        traceback.print_exc() 
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @api_view(['POST'])
@@ -85,17 +108,24 @@ def validateStudent(request,*args,**kwargs):
 
 @api_view(['POST'])
 def validateTeacher(request,*args,**kwargs):
-    if request.method == 'POST':
-        email = request.data.get('email')
-        password_hash = request.data.get('password_hash')
-        try:
-            teacher = Teacher.objects.get(email=email, password_hash=password_hash)
+   
+    email = request.data.get('email')
+    password = request.data.get('password')
+
+    if email is None or password is None:
+        return Response({"detail": "Email and Password are required"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+
+        teacher = Teacher.objects.get(email=email)
+        if not check_password(password, teacher.password_hash):
+            return Response({'error': 'Invalid password'}, status=status.HTTP_400_BAD_REQUEST)      
+        else: 
             return Response({'message': 'Teacher validated successfully', 'teacher_id': teacher.id}, status=status.HTTP_200_OK)
-        except Teacher.DoesNotExist:
-            return Response({'error': 'Invalid email or password'}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            traceback.print_exc()
-            return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    except Teacher.DoesNotExist:
+        return Response({'error': 'Invalid email or user not registered'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         
 
 @api_view(['POST'])
@@ -113,3 +143,93 @@ def get_subject_details(request,*args,**kwargs):
         except Exception as e:
             traceback.print_exc()
             return Response({"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        
+
+@api_view(['POST'])
+def send_otp(request, *args, **kwargs):
+    try:
+        email = request.data.get("email")
+        otp = random.randint(1000, 9999)
+
+        if email is None:
+            return Response({"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        cache.set(email, otp,120)
+
+        subject = "Your ClassLens OTP Verification Code"
+
+        plain_message = f"""
+        Hello,
+
+        Your One Time Password for ClassLens is: {otp}
+
+        This code is valid for 2 minutes. For your security, please do not share it with anyone.
+
+        If you did not request this, you can safely ignore this email.
+
+        Thank you,
+        The ClassLens Team
+        """
+
+        html_message = f"""
+        <p>Hello,</p>
+        <p>Your One Time Password for ClassLens is: <strong>{otp}</strong></p>
+        <p>This code is valid for <strong>2 minutes</strong>. For your security, please do not share it with anyone.</p>
+        <p>If you did not request this, you can safely ignore this email.</p>
+        <br>
+        <p>Thank you,<br>
+        <strong>The ClassLens Team</strong></p>
+        """
+
+        mail = send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[email],
+            fail_silently=False,  
+            html_message=html_message  
+        )
+
+        return Response({"message": "OTP sent successfully"}, status=200)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['POST'])
+def verify_otp(request, *args, **kwargs):
+    try:
+        email = request.data.get("email")
+        otp = request.data.get("otp")
+        if email is None or otp is None:
+            return Response({"detail": "Email and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached_otp = cache.get(email)
+
+        if cached_otp is None or cached_otp != int(otp):
+            return Response({"detail": "Invalid or expired OTP"}, status=status.HTTP_400_BAD_REQUEST)
+        cache.delete(email)
+        return Response({"message": "OTP verified successfully"}, status=200)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@api_view(['POST'])
+def set_password(request, *args, **kwargs):
+    try:
+        email = request.data.get("email")
+        password = request.data.get("password")
+        if email is None or password is None:
+            return Response({"detail": "Email and Password are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        teacher = Teacher.objects.get(email=email)
+        teacher.password_hash = make_password(password)
+        teacher.save()
+        return Response({"message": "password set successfully"}, status=200)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"detail": "Method not allowed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
