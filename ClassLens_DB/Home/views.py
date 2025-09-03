@@ -219,7 +219,19 @@ def send_otp(request, *args, **kwargs):
             )
 
         cache.set(email, otp, 120)
-        teacher = Teacher.objects.get(email=email)
+        
+        teacher = Teacher.objects.filter(email=email).first()
+        student = None if teacher else Student.objects.filter(email=email).first()
+        
+        display_name = teacher.name if teacher else student.name
+
+        if not (teacher or student):
+            return Response(
+                {"detail": "No user found with this email"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+            
+        
 
         subject = "Your ClassLens OTP Verification Code"
 
@@ -235,9 +247,9 @@ def send_otp(request, *args, **kwargs):
         Thank you,
         The ClassLens Team
         """
-        print(teacher.name)
+        
         html_message = f"""
-        <p>Hello {teacher.name},</p>
+        <p>Hello {display_name},</p>
         <p>Your One Time Password for ClassLens is: <strong>{otp}</strong></p>
         <p>This code is valid for <strong>2 minutes</strong>. For your security, please do not share it with anyone.</p>
         <p>If you did not request this, you can safely ignore this email.</p>
@@ -254,7 +266,7 @@ def send_otp(request, *args, **kwargs):
                 "plainText": plain_message,
                 "html": html_message,
             },
-            "recipients": {"to": [{"address": email, "displayName": teacher.name}]},
+            "recipients": {"to": [{"address": email, "displayName": display_name}]},
             "senderAddress": "DoNotReply@5e413bf2-7085-4332-af0d-80905f679aac.azurecomm.net",
         }
 
