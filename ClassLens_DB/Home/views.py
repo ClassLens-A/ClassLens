@@ -217,11 +217,21 @@ def send_otp(request, *args, **kwargs):
             return Response(
                 {"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST
             )
-
-        cache.set(email, otp, 120)
         
         teacher = Teacher.objects.filter(email=email).first()
         student = None if teacher else Student.objects.filter(email=email).first()
+
+        if teacher is not None:
+            if teacher.password_hash is not None:
+                print("Password is not None")
+                return Response(
+                    {"detail": "Email is already registered"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        cache.set(email, otp, 600)
+        
+       
         
         display_name = teacher.name if teacher else student.name
 
@@ -284,6 +294,48 @@ def send_otp(request, *args, **kwargs):
         )
 
 
+@api_view(["POST"])
+def verify_email(request, *args, **kwargs):
+    try:
+        email = request.data.get("email")
+        if email is None:
+            return Response(
+                {"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not (Teacher.objects.filter(email=email).exists() or Student.objects.filter(email=email).exists()):
+            return Response(
+                {"detail": "No user found with this email"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        teacher = Teacher.objects.filter(email=email).first()
+        student = None if teacher else Student.objects.filter(email=email).first()
+
+        if teacher is not None:
+            if teacher.password_hash is not None:
+                print("Password is not None")
+                return Response(
+                    {"detail": "Email is already registered! Try login instead"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            else:
+                return Response({"message": "Email verified successfully"}, status=200)
+        else:
+            if student.password_hash is not None:
+                print("Password is not None")
+                return Response(
+                    {"detail": "Email is already registered"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            else:
+                 return Response({"message": "Email verified successfully"}, status=200)
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Method not allowed"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 @api_view(["POST"])
 def verify_otp(request, *args, **kwargs):
     try:
