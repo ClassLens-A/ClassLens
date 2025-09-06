@@ -168,7 +168,7 @@ def validateTeacher(request, *args, **kwargs):
             )
         else:
             return Response(
-                {"message": "Teacher validated successfully", "teacher_id": teacher.id},
+                {"message": "Teacher validated successfully", "teacher_id": teacher.id,'teacher_name':teacher.name},
                 status=status.HTTP_200_OK,
             )
     except Teacher.DoesNotExist:
