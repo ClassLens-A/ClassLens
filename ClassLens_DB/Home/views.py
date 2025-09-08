@@ -250,7 +250,7 @@ def send_otp(request, *args, **kwargs):
 
         Your One Time Password for ClassLens is: {otp}
 
-        This code is valid for 2 minutes. For your security, please do not share it with anyone.
+        This code is valid for 10 minutes. For your security, please do not share it with anyone.
 
         If you did not request this, you can safely ignore this email.
 
@@ -261,7 +261,7 @@ def send_otp(request, *args, **kwargs):
         html_message = f"""
         <p>Hello {display_name},</p>
         <p>Your One Time Password for ClassLens is: <strong>{otp}</strong></p>
-        <p>This code is valid for <strong>2 minutes</strong>. For your security, please do not share it with anyone.</p>
+        <p>This code is valid for <strong>10 minutes</strong>. For your security, please do not share it with anyone.</p>
         <p>If you did not request this, you can safely ignore this email.</p>
         <br>
         <p>Thank you,<br>
