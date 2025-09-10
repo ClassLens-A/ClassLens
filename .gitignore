@@ -12,13 +12,16 @@ __pycache__/
 db.sqlite3
 *.sqlite3
 media/
+staticfiles/
 *.log
 
 # ENV
 .env
-venv/
 .env.*
-classlens-vnv
+venv/
+.venv/
+classlens-vnv/
+.classlens-env/
 
 
 # Migrations (optional — keep if you want to track them)
@@ -28,8 +31,9 @@ classlens-vnv
 
 # VS Code
 .vscode/
+# JetBrains
+.idea/
 
 # OS Files
 .DS_Store
 Thumbs.db
-.env
