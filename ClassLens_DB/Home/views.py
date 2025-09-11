@@ -22,7 +22,6 @@ from azure.communication.email import EmailClient
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 env = environ.Env()
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
@@ -91,7 +90,6 @@ def registerNewStudent(request, *args, **kwargs):
 
 @api_view(["POST"])
 def registerNewTeacher(request, *args, **kwargs):
-
     data = request.data
 
     required_fields = ["name", "email", "password", "departmentID"]
@@ -128,30 +126,40 @@ def registerNewTeacher(request, *args, **kwargs):
 
 @api_view(["POST"])
 def validateStudent(request, *args, **kwargs):
-    if request.method == "POST":
-        prn = request.data.get("prn")
-        password_hash = request.data.get("password_hash")
-        try:
-            student = Student.objects.get(prn=prn, password_hash=password_hash)
+    prn = request.data.get("prn")
+    password = request.data.get("password")
+
+    if prn is None or password is None:
+        return Response(
+            {"detail": "PRN and Password are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        student = Student.objects.get(prn=prn)
+        if not check_password(password, student.password_hash):
             return Response(
-                {"message": "Student validated successfully", "student_id": student.id},
+                {"detail": "Invalid password"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        else:
+            return Response(
+                {"message": "Student validated successfully", "student_id": student.id, 'student_name': student.name},
                 status=status.HTTP_200_OK,
             )
-        except Student.DoesNotExist:
-            return Response(
-                {"error": "Invalid PRN or password"}, status=status.HTTP_400_BAD_REQUEST
-            )
-        except Exception as e:
-            traceback.print_exc()
-            return Response(
-                {"detail": "Method not allowed"},
-                status=status.HTTP_405_METHOD_NOT_ALLOWED,
-            )
+    except Student.DoesNotExist:
+        return Response(
+            {"detail": "Invalid PRN or password"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Method not allowed"},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
 
 @api_view(["POST"])
 def validateTeacher(request, *args, **kwargs):
-
     email = request.data.get("email")
     password = request.data.get("password")
 
@@ -163,18 +171,22 @@ def validateTeacher(request, *args, **kwargs):
     try:
 
         teacher = Teacher.objects.get(email=email)
+        if teacher.password_hash is None:
+            return Response(
+                {"detail": "User not registered"}, status=status.HTTP_400_BAD_REQUEST
+            )
         if not check_password(password, teacher.password_hash):
             return Response(
-                {"error": "Invalid password"}, status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Invalid password"}, status=status.HTTP_400_BAD_REQUEST
             )
         else:
             return Response(
-                {"message": "Teacher validated successfully", "teacher_id": teacher.id,'teacher_name':teacher.name},
+                {"message": "Teacher validated successfully", "teacher_id": teacher.id, 'teacher_name': teacher.name},
                 status=status.HTTP_200_OK,
             )
     except Teacher.DoesNotExist:
         return Response(
-            {"error": "Invalid email or user not registered"},
+            {"detail": "Invalid email or user not registered"},
             status=status.HTTP_400_BAD_REQUEST,
         )
     except Exception as e:
@@ -229,9 +241,9 @@ def send_otp(request, *args, **kwargs):
                 )
 
         cache.set(email, otp, 600)
-        
-       
-        
+
+        print('OPT:', otp)
+
         display_name = teacher.name if teacher else student.name
 
         if not (teacher or student):
@@ -335,6 +347,43 @@ def verify_email(request, *args, **kwargs):
             {"detail": "Method not allowed"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["POST"])
+def verify_prn(request, *args, **kwargs):
+    try:
+        prn = request.data.get("prn")
+        if prn is None:
+            return Response(
+                {"detail": "PRN is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        student = Student.objects.filter(prn=prn).first()
+        if not student:
+            return Response(
+                {"detail": "No user found with this PRN"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if student.password_hash is not None:
+            print("Password is not None")
+            return Response(
+                {"detail": "PRN is already registered! Try login instead"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        else:
+            return Response({
+                "message": "PRN verified successfully",
+                "email": student.email
+            }, status=200)
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Method not allowed"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
 @api_view(["POST"])
 def verify_otp(request, *args, **kwargs):
     try:
@@ -374,15 +423,26 @@ def set_password(request, *args, **kwargs):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        teacher = Teacher.objects.get(email=email)
-        teacher.password_hash = make_password(password)
-        teacher.save()
-        return Response({"message": "password set successfully"}, status=200)
+        teacher = Teacher.objects.filter(email=email).first()
+        student = None if teacher else Student.objects.filter(email=email).first()
+
+        if teacher:
+            teacher.password_hash = make_password(password)
+            teacher.save()
+            print("Teacher password set successfully")
+            return Response({"message": "Teacher password set successfully"}, status=200)
+        elif student:
+            student.password_hash = make_password(password)
+            student.save()
+            print("Student password set successfully")
+            return Response({"message": "Student password set successfully"}, status=200)
+        else:
+            return Response({"detail": "No user found with this email"}, status=status.HTTP_404_NOT_FOUND)
 
     except Exception as e:
         traceback.print_exc()
         return Response(
-            {"detail": "Method not allowed"},
+            {"detail": "An error occurred while updating the password"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     
