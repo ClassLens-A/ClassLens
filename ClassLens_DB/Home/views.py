@@ -6,7 +6,7 @@ import numpy as np
 from rest_framework.response import Response
 from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord
 from django.db.models import Count, Q
-from .serializers import DepartmentSerializer
+from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
 from django.contrib.auth.hashers import make_password, check_password
 from django.shortcuts import get_object_or_404
@@ -160,10 +160,8 @@ def get_subject_details(request, *args, **kwargs):
                 SubjectFromDept, department=department, year=year, semester=semester
             )
             subjects = subject_from_dept.subject.all()
-            subject_list = [
-                {"code": subject.code, "name": subject.name} for subject in subjects
-            ]
-            return Response({"subjects": subject_list}, status=status.HTTP_200_OK)
+            subjects = SubjectSerializer(subjects, many=True).data
+            return Response({"subjects": subjects}, status=status.HTTP_200_OK)
         except Exception as e:
             traceback.print_exc()
             return Response(
