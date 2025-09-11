@@ -486,7 +486,7 @@ def get_student_attendance(request, *args, **kwargs):
 
 @api_view(["POST"])
 @parser_classes([MultiPartParser])
-def take_attendance(request, *args, **kwargs):
+def mark_attendance(request, *args, **kwargs):
     photo = request.FILES.get("photo")
 
     if not photo:
