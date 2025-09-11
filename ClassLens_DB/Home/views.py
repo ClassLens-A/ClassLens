@@ -4,7 +4,8 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept
+from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord
+from django.db.models import Count, Q
 from .serializers import DepartmentSerializer
 from rest_framework.parsers import MultiPartParser
 from django.contrib.auth.hashers import make_password, check_password
@@ -446,3 +447,52 @@ def set_password(request, *args, **kwargs):
             {"detail": "An error occurred while updating the password"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    
+@api_view(["POST"])
+def get_student_attendance(request, *args, **kwargs):
+    try:
+        student_id = request.data.get("student_id")
+
+        if student_id is None:
+            return Response(
+                {"detail": "student_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Aggregate attendance per subject
+        attendance_data = (
+            AttendanceRecord.objects
+            .filter(student_id=student_id)
+            .values('class_session__subject__id', 'class_session__subject__name')
+            .annotate(
+                total_classes=Count('id'),
+                attended_classes=Count('id', filter=Q(status=True))
+            )
+        )
+
+        result = []
+        for record in attendance_data:
+            total = record['total_classes']
+            attended = record['attended_classes']
+            percentage = round((attended / total) * 100, 2) if total > 0 else 0
+
+            result.append({
+                "subject_id": record['class_session__subject__id'],
+                "subject_name": record['class_session__subject__name'],
+                "total_classes": total,
+                "attended_classes": attended,
+                "attendance_percentage": percentage
+            })
+
+        return Response(
+            {"student_id": student_id, "attendance": result},
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+

@@ -22,7 +22,7 @@ class Student(models.Model):
     prn = models.BigIntegerField(unique=True, null=False)
     name = models.TextField(null=False)
     email = models.EmailField(unique=True, null=False)
-    password_hash = models.TextField(null=False)
+    password_hash = models.TextField(null=True,blank=True)
     year = models.IntegerField(null=False)
     department = models.ForeignKey(
         Department, 
