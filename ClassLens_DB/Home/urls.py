@@ -1,6 +1,6 @@
 from django.urls import path
 from django.urls import include
-from Home.views import getDepartments,registerNewStudent,registerNewTeacher,validateStudent,validateTeacher,send_otp,verify_otp,set_password,get_subject_details,verify_email, verify_prn, get_student_attendance
+from Home.views import getDepartments,registerNewStudent,take_attendance,registerNewTeacher,validateStudent,validateTeacher,send_otp,verify_otp,set_password,get_subject_details,verify_email, verify_prn, get_student_attendance
 
 urlpatterns=[
     path('getDepartments/', getDepartments, name='get_departments'),
@@ -15,4 +15,5 @@ urlpatterns=[
     path('verifyEmail',verify_email,name='verify_email'),
     path("students/attendance/", get_student_attendance, name="get_student_attendance"),
     path('verifyPRN',verify_prn, name='verify_prn'),
+    path('takeAttendance',take_attendance, name='take_attendance'),
 ]

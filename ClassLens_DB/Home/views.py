@@ -18,7 +18,10 @@ from django.conf import settings
 import environ
 import os
 from pathlib import Path
+import cv2
+import matplotlib.pyplot as plt
 from azure.communication.email import EmailClient
+import uuid
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -35,57 +38,6 @@ def getDepartments(request):
     return Response(
         {"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
     )
-
-
-@api_view(["POST"])
-@parser_classes([MultiPartParser])
-def registerNewStudent(request, *args, **kwargs):
-    if request.method == "POST":
-        photo = request.FILES.get("photo")
-
-        if not photo:
-            return Response(
-                {"error": "No photo uploaded"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            image = Image.open(photo)
-            image = image.convert("RGB")
-            img_arr = np.array(image)
-            image_embedding = DeepFace.represent(
-                img_path=img_arr,
-                model_name="Facenet512",
-                detector_backend="retinaface",
-                enforce_detection=True,
-            )[0]["embedding"]
-            department = get_object_or_404(
-                Department, name=request.POST.get("department")
-            )
-
-            student = Student.objects.create(
-                name=request.POST.get("name"),
-                prn=request.POST.get("prn"),
-                email=request.POST.get("email"),
-                year=request.POST.get("year"),
-                password_hash=request.POST.get("password_hash"),
-                department=department,
-                face_embedding=image_embedding,
-            )
-            student.save()
-            return Response(
-                {"message": "Student registered successfully"},
-                status=status.HTTP_201_CREATED,
-            )
-        except ValueError as ve:
-            return Response(
-                {"error": str(ve) + "Invalid photo uploaded"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        except Exception as e:
-            traceback.print_exc()
-            return Response(
-                {"Error": str(e)}, status=status.HTTP_405_METHOD_NOT_ALLOWED
-            )
 
 
 @api_view(["POST"])
@@ -415,31 +367,46 @@ def verify_otp(request, *args, **kwargs):
 
 
 @api_view(["POST"])
+@parser_classes([MultiPartParser])
 def set_password(request, *args, **kwargs):
     try:
-        email = request.data.get("email")
         password = request.data.get("password")
-        if email is None or password is None:
-            return Response(
-                {"detail": "Email and Password are required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        teacher = Teacher.objects.filter(email=email).first()
-        student = None if teacher else Student.objects.filter(email=email).first()
-
-        if teacher:
-            teacher.password_hash = make_password(password)
-            teacher.save()
-            print("Teacher password set successfully")
-            return Response({"message": "Teacher password set successfully"}, status=200)
-        elif student:
-            student.password_hash = make_password(password)
-            student.save()
-            print("Student password set successfully")
-            return Response({"message": "Student password set successfully"}, status=200)
-        else:
-            return Response({"detail": "No user found with this email"}, status=status.HTTP_404_NOT_FOUND)
+        if request.data.get("email"):
+            email=request.data.get("email")
+            if email is None or password is None:
+                return Response(
+                    {"detail": "Email and Password are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            teacher = Teacher.objects.filter(email=email).first()
+            if teacher : 
+                teacher.password_hash = make_password(password)
+                teacher.save()
+                print("Teacher password set successfully")
+                return Response({"message": "Teacher password set successfully"}, status=200)
+            else : 
+                return Response({"detail": "No Teacher found with this email"}, status=status.HTTP_404_NOT_FOUND)
+        
+        elif request.data.get("prn"):
+            prn=request.data.get("prn")
+            if prn is None or password is None:
+                return Response(
+                    {"detail": "PRN and Password are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            
+            student = Student.objects.filter(prn=prn).first()
+            if student : 
+                student.password_hash = make_password(password)
+                try : 
+                    student.face_embedding=registerNewStudent(request.FILES.get("photo"))
+                except ValueError as ve :
+                    return Response({"error": "Face Not Detected, Upload A New Image"}, status=status.HTTP_400_BAD_REQUEST)
+                student.save()
+                print("Student password set successfully")
+                return Response({"message": "Student password set successfully"}, status=200)
+            else:
+                return Response({"detail": "No Student found with this prn"}, status=status.HTTP_404_NOT_FOUND)
 
     except Exception as e:
         traceback.print_exc()
@@ -448,6 +415,29 @@ def set_password(request, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     
+def registerNewStudent(photo):
+
+    if not photo:
+        return Response(
+            {"error": "No photo uploaded"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        image = Image.open(photo)
+        image = image.convert("RGB")
+        img_arr = np.array(image)
+        image_embedding = DeepFace.represent(
+            img_path=img_arr,
+            model_name="Facenet512",
+            detector_backend="retinaface",
+            enforce_detection=True,
+        )[0]["embedding"]
+
+        return image_embedding
+    except ValueError as ve:
+        return ValueError(ve)
+
+
 @api_view(["POST"])
 def get_student_attendance(request, *args, **kwargs):
     try:
@@ -496,3 +486,50 @@ def get_student_attendance(request, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+@api_view(["POST"])
+@parser_classes([MultiPartParser])
+def take_attendance(request, *args, **kwargs):
+    photo = request.FILES.get("photo")
+
+    if not photo:
+        return Response({"error": "No photo provided."}, status=400)
+
+    file_bytes = np.asarray(bytearray(photo.read()), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+    try:
+        all_faces = DeepFace.extract_faces(
+            img_path=image,
+            detector_backend='retinaface',
+            enforce_detection=True,
+            align=True
+        )
+    except ValueError:
+        return Response({"error": "No faces detected in the image."}, status=400)
+
+    for face_img in all_faces:
+        facial_area = face_img['facial_area']
+        x, y, w, h = facial_area['x'], facial_area['y'], facial_area['w'], facial_area['h']
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    plt.figure(figsize=(15, 10))
+    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    plt.title(f"Detected {len(all_faces)} Faces", fontsize=20)
+    plt.axis('off')
+
+    unique_id = uuid.uuid4()
+    filename = f"detected_{unique_id}.jpeg"
+
+    output_dir = settings.BASE_DIR / 'static' / 'images'
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_path = output_dir / filename
+    plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+    image_url = f"{request.scheme}://{request.get_host()}/static/images/{filename}"
+
+    return Response({
+        "facesDetected": len(all_faces),
+        "url": image_url
+    }, status=200)
