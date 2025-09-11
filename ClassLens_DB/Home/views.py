@@ -518,14 +518,14 @@ def take_attendance(request, *args, **kwargs):
     unique_id = uuid.uuid4()
     filename = f"detected_{unique_id}.jpeg"
 
-    output_dir = settings.BASE_DIR / 'static' / 'images'
+    output_dir = settings.BASE_DIR / 'media' / 'images'
     output_dir.mkdir(parents=True, exist_ok=True)
     
     file_path = output_dir / filename
     plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
     plt.close()
 
-    image_url = f"{request.scheme}://{request.get_host()}/static/images/{filename}"
+    image_url = f"{request.scheme}://{request.get_host()}/media/images/{filename}"
 
     return Response({
         "facesDetected": len(all_faces),
