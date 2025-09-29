@@ -365,7 +365,6 @@ def verify_otp(request, *args, **kwargs):
 
 
 @api_view(["POST"])
-@parser_classes([MultiPartParser])
 def set_password(request, *args, **kwargs):
     try:
         password = request.data.get("password")
