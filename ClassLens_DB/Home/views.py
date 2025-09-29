@@ -22,6 +22,7 @@ import cv2
 import matplotlib.pyplot as plt
 from azure.communication.email import EmailClient
 import uuid
+from .tasks import evaluate_attendance
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -483,6 +484,7 @@ def get_student_attendance(request, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+from django.core.files.storage import default_storage
 @api_view(["POST"])
 @parser_classes([MultiPartParser])
 def mark_attendance(request, *args, **kwargs):
@@ -490,43 +492,19 @@ def mark_attendance(request, *args, **kwargs):
 
     if not photo:
         return Response({"error": "No photo provided."}, status=400)
-
-    file_bytes = np.asarray(bytearray(photo.read()), dtype=np.uint8)
-    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-
-    try:
-        all_faces = DeepFace.extract_faces(
-            img_path=image,
-            detector_backend='retinaface',
-            enforce_detection=True,
-            align=True
-        )
-    except ValueError:
-        return Response({"error": "No faces detected in the image."}, status=400)
-
-    for face_img in all_faces:
-        facial_area = face_img['facial_area']
-        x, y, w, h = facial_area['x'], facial_area['y'], facial_area['w'], facial_area['h']
-        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-    plt.figure(figsize=(15, 10))
-    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    plt.title(f"Detected {len(all_faces)} Faces", fontsize=20)
-    plt.axis('off')
-
-    unique_id = uuid.uuid4()
-    filename = f"detected_{unique_id}.jpeg"
-
-    output_dir = settings.BASE_DIR / 'media' / 'images'
-    output_dir.mkdir(parents=True, exist_ok=True)
     
-    file_path = output_dir / filename
-    plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
-    plt.close()
+    file_extension = photo.name.split('.')[-1]
+    unique_filename = f"{uuid.uuid4()}.{file_extension}"
 
-    image_url = f"{request.scheme}://{request.get_host()}/media/images/{filename}"
+    file_name = default_storage.save(unique_filename, photo)
 
+    absolute_file_path = default_storage.path(file_name)
+
+    # file_bytes = np.asarray(bytearray(photo.read()), dtype=np.uint8)
+    # image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+    evaluate_attendance.delay(absolute_file_path, request.scheme, request.get_host())
+    
     return Response({
-        "facesDetected": len(all_faces),
-        "url": image_url
+        "message": "Attendance processing started. You will be notified once it's done."
     }, status=200)
