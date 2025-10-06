@@ -23,6 +23,8 @@ import matplotlib.pyplot as plt
 from azure.communication.email import EmailClient
 import uuid
 from .tasks import evaluate_attendance
+from django.core.files.storage import default_storage
+from celery.result import AsyncResult
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -162,11 +164,11 @@ def get_subject_details(request, *args, **kwargs):
             )
             subjects = subject_from_dept.subject.all()
             subjects = SubjectSerializer(subjects, many=True).data
-            return Response({"subjects": subjects}, status=status.HTTP_200_OK)
+            return Response({"subjects": subjects,"message":"subject details"}, status=status.HTTP_200_OK)
         except Exception as e:
             traceback.print_exc()
             return Response(
-                {"detail": "Method not allowed"},
+                {"detail": "Something went wrong"},
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
 
@@ -484,7 +486,7 @@ def get_student_attendance(request, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-from django.core.files.storage import default_storage
+
 @api_view(["POST"])
 @parser_classes([MultiPartParser])
 def mark_attendance(request, *args, **kwargs):
@@ -503,8 +505,24 @@ def mark_attendance(request, *args, **kwargs):
     # file_bytes = np.asarray(bytearray(photo.read()), dtype=np.uint8)
     # image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    evaluate_attendance.delay(absolute_file_path, request.scheme, request.get_host())
-    
+    task = evaluate_attendance.delay(absolute_file_path, request.scheme, request.get_host())
+    print(task.id)
     return Response({
-        "message": "Attendance processing started. You will be notified once it's done."
-    }, status=200)
+        "message": "Attendance processing started. You will be notified once it's done.",
+        "task_id": task.id
+    }, status=202)
+
+@api_view(["GET"])
+def attendance_status(request, task_id,*args, **kwargs):
+
+    if not task_id:
+        return Response({"error": "Task ID is required"}, status=400)
+
+    task = AsyncResult(task_id)
+
+    if task.successful():
+        return Response({"status": task.status, "result": task.result}, status=200)
+    elif task.failed():
+        return Response({"status": task.status, "result": task.result}, status=500)
+    
+    return Response({"status": task.status,"result":"processing"}, status=202)

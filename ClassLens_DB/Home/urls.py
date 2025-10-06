@@ -1,6 +1,6 @@
 from django.urls import path
 from django.urls import include
-from Home.views import getDepartments,registerNewStudent,mark_attendance,registerNewTeacher,validateStudent,validateTeacher,send_otp,verify_otp,set_password,get_subject_details,verify_email, verify_prn, get_student_attendance
+from Home.views import getDepartments,registerNewStudent,mark_attendance,registerNewTeacher,validateStudent,validateTeacher,send_otp,verify_otp,set_password,get_subject_details,verify_email, verify_prn, get_student_attendance,attendance_status
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -18,6 +18,7 @@ urlpatterns=[
     path("students/attendance/", get_student_attendance, name="get_student_attendance"),
     path('verifyPRN',verify_prn, name='verify_prn'),
     path('markAttendance',mark_attendance, name='mark_attendance'),
+    path('attendanceStatus/<str:task_id>/',attendance_status, name='attendance_status'),
 ]
 
 if settings.DEBUG:

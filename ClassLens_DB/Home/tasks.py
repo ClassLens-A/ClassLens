@@ -8,8 +8,10 @@ import uuid
 from django.conf import settings
 from django.http import request
 import numpy as np
+
 @shared_task
 def evaluate_attendance(image_path, scheme, host):
+  
     image = cv2.imread(image_path)
     if image is None:
         print("Error: Unable to load image. {image_path} may be incorrect.")
@@ -48,5 +50,7 @@ def evaluate_attendance(image_path, scheme, host):
     image_url = f"{scheme}://{host}/media/images/{filename}"
     
     os.remove(image_path)
-    print(f'Image processing completed for {image_path}. Result saved at {file_path}')
-    return
+    return {
+    "num_faces": int(len(all_faces)),
+    "image_url": image_url
+    }
