@@ -4,7 +4,7 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord
+from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, Enrollment
 from django.db.models import Count, Q
 from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
@@ -441,19 +441,18 @@ def registerNewStudent(photo):
 @api_view(["POST"])
 def get_student_attendance(request, *args, **kwargs):
     try:
-        student_id = request.data.get("student_id")
+        subject_id = request.data.get("subject_id")
 
-        if student_id is None:
+        if subject_id is None:
             return Response(
-                {"detail": "student_id is required"},
+                {"detail": "subject_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         # Aggregate attendance per subject
         attendance_data = (
             AttendanceRecord.objects
-            .filter(student_id=student_id)
-            .values('class_session__subject__id', 'class_session__subject__name')
+            .filter(class_session__subject__id=subject_id)
+            .values('student__id','student__name')
             .annotate(
                 total_classes=Count('id'),
                 attended_classes=Count('id', filter=Q(status=True))
@@ -467,15 +466,15 @@ def get_student_attendance(request, *args, **kwargs):
             percentage = round((attended / total) * 100, 2) if total > 0 else 0
 
             result.append({
-                "subject_id": record['class_session__subject__id'],
-                "subject_name": record['class_session__subject__name'],
+                "student_id": record['student__id'],
+                "student_name": record['student__name'],
                 "total_classes": total,
                 "attended_classes": attended,
                 "attendance_percentage": percentage
             })
 
         return Response(
-            {"student_id": student_id, "attendance": result},
+            {"attendance": result},
             status=status.HTTP_200_OK,
         )
 
