@@ -366,7 +366,6 @@ def verify_otp(request, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-
 @api_view(["POST"])
 def set_password(request, *args, **kwargs):
     try:
@@ -437,7 +436,6 @@ def registerNewStudent(photo):
     except ValueError as ve:
         return ValueError(ve)
 
-
 @api_view(["POST"])
 def get_student_attendance(request, *args, **kwargs):
     try:
@@ -486,7 +484,6 @@ def get_student_attendance(request, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-
 @api_view(["POST"])
 @parser_classes([MultiPartParser])
 def mark_attendance(request, *args, **kwargs):
@@ -525,4 +522,4 @@ def attendance_status(request, task_id,*args, **kwargs):
     elif task.failed():
         return Response({"status": task.status, "result": task.result}, status=500)
     
-    return Response({"status": task.status,"result":"processing"}, status=202)
+    return Response({"status": task.status,"result":{"num_faces":0,"image_url":""}}, status=202)
