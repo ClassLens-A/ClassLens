@@ -4,7 +4,7 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, Enrollment
+from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord
 from django.db.models import Count, Q
 from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
