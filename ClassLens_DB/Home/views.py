@@ -4,7 +4,7 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord
+from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, TeacherSubject
 from django.db.models import Count, Q
 from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
@@ -507,6 +507,35 @@ def mark_attendance(request, *args, **kwargs):
         "message": "Attendance processing started. You will be notified once it's done.",
         "task_id": task.id
     }, status=202)
+
+@api_view(["POST"])
+def teacher_subjects(request,*args, **kwargs):
+    teacher_id = request.data.get("teacher_id")
+    if not teacher_id:
+        return Response({"error": "Teacher ID is required"}, status=400)
+    try:
+        subjects = TeacherSubject.objects.filter(teacher_id=teacher_id).values(
+            'subject__id', 
+            'subject__code', 
+            'subject__name'
+        )
+
+        clean_subjects = [
+            {
+                'id': s['subject__id'],
+                'code': s['subject__code'],
+                'name': s['subject__name']
+            }
+            for s in subjects
+        ]
+        return Response({"subjects": clean_subjects}, status=200)
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
 
 @api_view(["GET"])
 def attendance_status(request, task_id,*args, **kwargs):

@@ -60,7 +60,7 @@ class SubjectFromDept(models.Model):
     def __str__(self):
         return f"{self.department} - {self.year}"
     
-class Student_Enrollment(models.Model):
+class StudentEnrollment(models.Model):
     student_prn = models.BigIntegerField(unique=True, null=False)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
 
@@ -70,7 +70,7 @@ class Student_Enrollment(models.Model):
     def _str_(self):
         return f"{self.student_prn} enrolled in {self.subject}"
     
-class Teacher_Subject(models.Model):
+class TeacherSubject(models.Model):
     teacher_id = models.ForeignKey(Teacher, on_delete=models.CASCADE)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
 
