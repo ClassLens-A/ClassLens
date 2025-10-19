@@ -61,15 +61,15 @@ class SubjectFromDept(models.Model):
         return f"{self.department} - {self.year}"
     
 class Enrollment(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    prn = models.BigIntegerField(unique=True, null=False)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = ('student', 'subject')
+        unique_together = ('prn', 'subject')
 
     def __str__(self):
-        return f"{self.student} enrolled in {self.subject}"
+        return f"{self.prn} enrolled in {self.subject}"
     
 class ClassSession(models.Model):
     department = models.ForeignKey(Department, on_delete=models.CASCADE)
