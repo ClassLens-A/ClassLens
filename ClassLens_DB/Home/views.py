@@ -524,7 +524,7 @@ def teacher_subjects(request,*args, **kwargs):
                 'id': s['subject__id'],
                 'code': s['subject__code'],
                 'name': s['subject__name'],
-                'number_of_students': StudentEnrollment.objects.filter(subject_id=s['subject__id']).count()
+                'strength': StudentEnrollment.objects.filter(subject_id=s['subject__id']).count()
             }
             for s in subjects
         ]
