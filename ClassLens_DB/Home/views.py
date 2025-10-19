@@ -4,7 +4,7 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, TeacherSubject
+from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, StudentEnrollment,TeacherSubject
 from django.db.models import Count, Q
 from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
@@ -149,7 +149,6 @@ def validateTeacher(request, *args, **kwargs):
         return Response(
             {"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
-
 
 @api_view(["POST"])
 def get_subject_details(request, *args, **kwargs):
@@ -524,7 +523,8 @@ def teacher_subjects(request,*args, **kwargs):
             {
                 'id': s['subject__id'],
                 'code': s['subject__code'],
-                'name': s['subject__name']
+                'name': s['subject__name'],
+                'number_of_students': StudentEnrollment.objects.filter(subject_id=s['subject__id']).count()
             }
             for s in subjects
         ]
@@ -535,7 +535,6 @@ def teacher_subjects(request,*args, **kwargs):
             {"detail": "Something went wrong"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
 
 @api_view(["GET"])
 def attendance_status(request, task_id,*args, **kwargs):
