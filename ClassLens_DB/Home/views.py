@@ -538,8 +538,9 @@ def teacher_subjects(request,*args, **kwargs):
         )
 
 ##Temp Working Method
-@api_view(["GET"])
+@api_view(["POST"])
 def get_absentees_list(request, *args, **kwargs):
+    class_session_id = request.data.get("class_session_id")
     names = [
         "Aarav", "Ishita", "Vihaan", "Saanvi", "Aryan",
         "Diya", "Aditya", "Ananya", "Karan", "Meera",
@@ -567,8 +568,8 @@ def get_absentees_list(request, *args, **kwargs):
 
 @api_view(["POST"])
 def change_attendance(request, *args, **kwargs):
+    class_session_id = request.data.get("class_session_id")
     student_list=request.data.get("student_list")
-    AttendanceRecord.objects.filter(id__in=student_list).update(status=True)
     return Response(status=status.HTTP_200_OK)
 
 @api_view(["GET"])
