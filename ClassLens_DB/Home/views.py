@@ -1,4 +1,5 @@
 from rest_framework import status
+import string
 from rest_framework.decorators import api_view, parser_classes
 from deepface import DeepFace
 from PIL import Image
@@ -535,6 +536,40 @@ def teacher_subjects(request,*args, **kwargs):
             {"detail": "Something went wrong"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+##Temp Working Method
+@api_view(["GET"])
+def get_absentees_list(request, *args, **kwargs):
+    names = [
+        "Aarav", "Ishita", "Vihaan", "Saanvi", "Aryan",
+        "Diya", "Aditya", "Ananya", "Karan", "Meera",
+        "Rohan", "Nisha", "Rahul", "Priya", "Vivaan"
+    ]
+
+    students = []
+    used_prns = set()
+
+    for i in range(1, 11):
+        while True:
+            prn = ''.join(random.choices(string.digits, k=10))
+            if prn not in used_prns:
+                used_prns.add(prn)
+                break
+
+        student = {
+            "id": i,
+            "prn": prn,
+            "name": random.choice(names)
+        }
+        students.append(student)
+
+    return Response({"students": students}, status=status.HTTP_200_OK)
+
+@api_view(["POST"])
+def change_attendance(request, *args, **kwargs):
+    student_list=request.data.get("student_list")
+    AttendanceRecord.objects.filter(id__in=student_list).update(status=True)
+    return Response(status=status.HTTP_200_OK)
 
 @api_view(["GET"])
 def attendance_status(request, task_id,*args, **kwargs):
