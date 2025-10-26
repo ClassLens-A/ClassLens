@@ -494,32 +494,25 @@ def mark_attendance(request, *args, **kwargs):
     Expects form-data with: photo, subject_id, teacher_id, department_id, year
     """
     photo = request.FILES.get("photo")
-    subject_id = request.data.get("subject_id")
-    teacher_id = request.data.get("teacher_id")
-    department_id = request.data.get("department_id")
+    subject_id = request.data.get("subject")
+    teacher_id = request.data.get("teacherID")
+    departmentName = request.data.get("departmentName")
     year = request.data.get("year")
 
-    if not all([photo, subject_id, teacher_id, department_id, year]):
+    if not all([photo, subject_id, teacher_id, departmentName, year]):
         return Response({"error": "Missing required fields (photo, subject_id, teacher_id, department_id, year)."}, status=400)
-    
-    file_extension = photo.name.split('.')[-1]
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
-
-    file_name = default_storage.save(unique_filename, photo)
-
-    absolute_file_path = default_storage.path(file_name)
 
     try:
         class_session = ClassSession.objects.create(
-            department = get_object_or_404(Department, id=department_id),
+            department = get_object_or_404(Department, name=departmentName),
             year = year,
             subject = get_object_or_404(Subject, id=subject_id),
             teacher = get_object_or_404(Teacher, id=teacher_id),
             class_datetime = datetime.now(),
-            attendance_photo = file_name
+            attendance_photo = photo
         )
 
-        task = evaluate_attendance.delay(class_session.id)
+        task = evaluate_attendance.delay(class_session.attendance_photo.path, class_session.id,request.scheme, request.get_host())
 
         return Response({
             "message": "Attendance processing started. You will be notified once it's done.",
@@ -530,7 +523,6 @@ def mark_attendance(request, *args, **kwargs):
         traceback.print_exc()
         return Response({"error": "Failed to start attendance session."}, status=500)
 
-
     # file_bytes = np.asarray(bytearray(photo.read()), dtype=np.uint8)
     # image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
@@ -540,77 +532,6 @@ def mark_attendance(request, *args, **kwargs):
     #     "message": "Attendance processing started. You will be notified once it's done.",
     #     "task_id": task.id
     # }, status=202)
-
-@api_view(["POST"])
-def evaluate_attendance(request):
-    """
-    Processes a class photo to identify enrolled students and mark attendance.
-    """
-    SIMILARITY_THRESHOLD = 0.70  # Match confidence must be > 70%
-    class_session_id = request.data.get("class_session_id")
-    try:
-        session = ClassSession.objects.get(id=class_session_id)
-        # image_path = session.attendance_photo.path
-        image_path = r"D:\Final year project\WhatsApp Image 2025-09-28 at 11.59.53_0e980da4.jpg"
-        # In your tasks.py or views.py
-
-        # Step 1: Get the list of PRNs for students enrolled in the subject.
-        enrolled_prns = StudentEnrollment.objects.filter(
-            subject=session.subject
-        ).values_list('student_prn', flat=True)
-
-        # Step 2: Use that list of PRNs to get the actual Student objects.
-        enrolled_students = Student.objects.filter(
-            prn__in=enrolled_prns
-        ).only('prn','name','face_embedding')
-
-        detected_faces = DeepFace.represent(
-            img_path=image_path,
-            model_name='ArcFace',
-            detector_backend='retinaface',
-            enforce_detection=True,
-            align=True
-        )
-
-    except (ClassSession.DoesNotExist, ValueError) as e:
-        print(f"Error: {e}")
-        return Response(f"Processing failed for session {class_session_id}. Reason: {str(e)}", status=400)
-    
-    present_student_prns = set()
-
-    for face in detected_faces:
-        embedding = face['embedding']
-
-        best_match = enrolled_students.order_by(
-            CosineDistance('face_embedding', embedding)
-        ).first()
-
-        if best_match:
-            distance = best_match.face_embedding @ embedding
-            similarity = (1 + distance) / 2  # Normalize to [0, 1]
-
-            if similarity >= SIMILARITY_THRESHOLD and best_match.prn not in present_student_prns:
-                present_student_prns.add(best_match.prn)
-
-    present_records = [
-        AttendanceRecord(class_session=session, student=student, status=True, marked_at=session.class_datetime)
-        for student in enrolled_students if student.prn in present_student_prns
-    ]
-    AttendanceRecord.objects.bulk_create(present_records)
-
-    enrolled_student_prns = set(enrolled_students.values_list('prn', flat=True))
-    absent_student_prns = enrolled_student_prns - present_student_prns
-
-    absent_records = [
-        AttendanceRecord(class_session=session, student=student, status=False, marked_at=session.class_datetime)
-        for student in enrolled_students if student.prn in absent_student_prns
-    ]
-    AttendanceRecord.objects.bulk_create(absent_records)
-
-    if os.path.exists(image_path):
-        os.remove(image_path)
-
-    return Response(f"Attendance processed for session {class_session_id}. Present: {len(present_student_prns)}, Absent: {len(absent_student_prns)})", status=200)
 
 @api_view(["POST"])
 def teacher_subjects(request,*args, **kwargs):
@@ -641,39 +562,26 @@ def teacher_subjects(request,*args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-##Temp Working Method
 @api_view(["POST"])
 def get_absentees_list(request, *args, **kwargs):
     class_session_id = request.data.get("class_session_id")
-    names = [
-        "Aarav", "Ishita", "Vihaan", "Saanvi", "Aryan",
-        "Diya", "Aditya", "Ananya", "Karan", "Meera",
-        "Rohan", "Nisha", "Rahul", "Priya", "Vivaan"
-    ]
+    if not class_session_id:
+        return Response({"error": "Class Session ID is required"}, status=400)
+    
+    absentees_students=AttendanceRecord.objects.filter(class_session_id=class_session_id, status=False).values_list('student__id', 'student__name', 'student__prn')
 
-    students = []
-    used_prns = set()
-
-    for i in range(1, 11):
-        while True:
-            prn = ''.join(random.choices(string.digits, k=10))
-            if prn not in used_prns:
-                used_prns.add(prn)
-                break
-
-        student = {
-            "id": i,
-            "prn": prn,
-            "name": random.choice(names)
-        }
-        students.append(student)
-
-    return Response({"students": students}, status=status.HTTP_200_OK)
+    return Response({"students": absentees_students}, status=status.HTTP_200_OK)
 
 @api_view(["POST"])
 def change_attendance(request, *args, **kwargs):
     class_session_id = request.data.get("class_session_id")
     student_list=request.data.get("student_list")
+
+    for student_id in student_list:
+        attendance_record = AttendanceRecord.objects.filter(class_session_id=class_session_id, student_id=student_id).first()
+        if attendance_record:
+            attendance_record.status = True
+            attendance_record.save()
     return Response(status=status.HTTP_200_OK)
 
 @api_view(["GET"])
