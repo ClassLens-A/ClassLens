@@ -80,8 +80,12 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
 
     try:
 
+        enrolled_prns = StudentEnrollment.objects.filter(
+            subject=session.subject
+        ).values_list('student_prn', flat=True)
+
         enrolled_students = Student.objects.filter(
-            studentenrollment__subject=session.subject
+            prn__in=enrolled_prns
         ).only('prn', 'name', 'face_embedding')
 
     except (ClassSession.DoesNotExist, ValueError) as e:

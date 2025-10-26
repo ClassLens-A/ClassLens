@@ -512,7 +512,7 @@ def mark_attendance(request, *args, **kwargs):
         class_session = ClassSession.objects.create(
             department = get_object_or_404(Department, name=departmentName),
             year = year,
-            subject = get_object_or_404(Subject, name=subject_id),
+            subject = get_object_or_404(Subject, id=subject_id),
             teacher = get_object_or_404(Teacher, id=teacher_id),
             class_datetime = datetime.now(),
             attendance_photo = photo
