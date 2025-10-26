@@ -500,19 +500,19 @@ def mark_attendance(request, *args, **kwargs):
     Expects form-data with: photo, subject_id, teacher_id, department_id, year
     """
     photo = request.FILES.get("photo")
-    subject_id = request.data.get("subject")
+    subject = request.data.get("subject")
     teacher_id = request.data.get("teacherID")
     departmentName = request.data.get("departmentName")
     year = request.data.get("year")
 
-    if not all([photo, subject_id, teacher_id, departmentName, year]):
+    if not all([photo, subject, teacher_id, departmentName, year]):
         return Response({"error": "Missing required fields (photo, subject_id, teacher_id, department_id, year)."}, status=400)
 
     try:
         class_session = ClassSession.objects.create(
             department = get_object_or_404(Department, name=departmentName),
             year = year,
-            subject = get_object_or_404(Subject, id=subject_id),
+            subject = get_object_or_404(Subject, name=subject),
             teacher = get_object_or_404(Teacher, id=teacher_id),
             class_datetime = datetime.now(),
             attendance_photo = photo
