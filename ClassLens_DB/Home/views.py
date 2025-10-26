@@ -4,7 +4,7 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, StudentEnrollment,TeacherSubject
+from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, StudentEnrollment,TeacherSubject, ClassSession, Subject
 from django.db.models import Count, Q
 from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
@@ -12,6 +12,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.shortcuts import get_object_or_404
 import traceback
 import random
+from datetime import datetime
 from django.core.cache import cache
 from django.core.mail import send_mail
 from django.conf import settings
@@ -25,6 +26,8 @@ import uuid
 from .tasks import evaluate_attendance
 from django.core.files.storage import default_storage
 from celery.result import AsyncResult
+from pgvector.django import CosineDistance
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -485,10 +488,18 @@ def get_student_attendance(request, *args, **kwargs):
 @api_view(["POST"])
 @parser_classes([MultiPartParser])
 def mark_attendance(request, *args, **kwargs):
+    """
+    API endpoint to start an attendance session.
+    Expects form-data with: photo, subject_id, teacher_id, department_id, year
+    """
     photo = request.FILES.get("photo")
+    subject_id = request.data.get("subject_id")
+    teacher_id = request.data.get("teacher_id")
+    department_id = request.data.get("department_id")
+    year = request.data.get("year")
 
-    if not photo:
-        return Response({"error": "No photo provided."}, status=400)
+    if not all([photo, subject_id, teacher_id, department_id, year]):
+        return Response({"error": "Missing required fields (photo, subject_id, teacher_id, department_id, year)."}, status=400)
     
     file_extension = photo.name.split('.')[-1]
     unique_filename = f"{uuid.uuid4()}.{file_extension}"
@@ -497,15 +508,108 @@ def mark_attendance(request, *args, **kwargs):
 
     absolute_file_path = default_storage.path(file_name)
 
+    try:
+        class_session = ClassSession.objects.create(
+            department = get_object_or_404(Department, id=department_id),
+            year = year,
+            subject = get_object_or_404(Subject, id=subject_id),
+            teacher = get_object_or_404(Teacher, id=teacher_id),
+            class_datetime = datetime.now(),
+            attendance_photo = file_name
+        )
+
+        task = evaluate_attendance.delay(class_session.id)
+
+        return Response({
+            "message": "Attendance processing started. You will be notified once it's done.",
+            "task_id": task.id
+        }, status=202)
+    
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"error": "Failed to start attendance session."}, status=500)
+
+
     # file_bytes = np.asarray(bytearray(photo.read()), dtype=np.uint8)
     # image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    task = evaluate_attendance.delay(absolute_file_path, request.scheme, request.get_host())
-    print(task.id)
-    return Response({
-        "message": "Attendance processing started. You will be notified once it's done.",
-        "task_id": task.id
-    }, status=202)
+    # task = evaluate_attendance.delay(absolute_file_path, request.scheme, request.get_host())
+    # print(task.id)
+    # return Response({
+    #     "message": "Attendance processing started. You will be notified once it's done.",
+    #     "task_id": task.id
+    # }, status=202)
+
+@api_view(["POST"])
+def evaluate_attendance(request):
+    """
+    Processes a class photo to identify enrolled students and mark attendance.
+    """
+    SIMILARITY_THRESHOLD = 0.70  # Match confidence must be > 70%
+    class_session_id = request.data.get("class_session_id")
+    try:
+        session = ClassSession.objects.get(id=class_session_id)
+        # image_path = session.attendance_photo.path
+        image_path = r"D:\Final year project\WhatsApp Image 2025-09-28 at 11.59.53_0e980da4.jpg"
+        # In your tasks.py or views.py
+
+        # Step 1: Get the list of PRNs for students enrolled in the subject.
+        enrolled_prns = StudentEnrollment.objects.filter(
+            subject=session.subject
+        ).values_list('student_prn', flat=True)
+
+        # Step 2: Use that list of PRNs to get the actual Student objects.
+        enrolled_students = Student.objects.filter(
+            prn__in=enrolled_prns
+        ).only('prn','name','face_embedding')
+
+        detected_faces = DeepFace.represent(
+            img_path=image_path,
+            model_name='ArcFace',
+            detector_backend='retinaface',
+            enforce_detection=True,
+            align=True
+        )
+
+    except (ClassSession.DoesNotExist, ValueError) as e:
+        print(f"Error: {e}")
+        return Response(f"Processing failed for session {class_session_id}. Reason: {str(e)}", status=400)
+    
+    present_student_prns = set()
+
+    for face in detected_faces:
+        embedding = face['embedding']
+
+        best_match = enrolled_students.order_by(
+            CosineDistance('face_embedding', embedding)
+        ).first()
+
+        if best_match:
+            distance = best_match.face_embedding @ embedding
+            similarity = (1 + distance) / 2  # Normalize to [0, 1]
+
+            if similarity >= SIMILARITY_THRESHOLD and best_match.prn not in present_student_prns:
+                present_student_prns.add(best_match.prn)
+
+    present_records = [
+        AttendanceRecord(class_session=session, student=student, status=True, marked_at=session.class_datetime)
+        for student in enrolled_students if student.prn in present_student_prns
+    ]
+    AttendanceRecord.objects.bulk_create(present_records)
+
+    enrolled_student_prns = set(enrolled_students.values_list('prn', flat=True))
+    absent_student_prns = enrolled_student_prns - present_student_prns
+
+    absent_records = [
+        AttendanceRecord(class_session=session, student=student, status=False, marked_at=session.class_datetime)
+        for student in enrolled_students if student.prn in absent_student_prns
+    ]
+    AttendanceRecord.objects.bulk_create(absent_records)
+
+    if os.path.exists(image_path):
+        os.remove(image_path)
+
+    return Response(f"Attendance processed for session {class_session_id}. Present: {len(present_student_prns)}, Absent: {len(absent_student_prns)})", status=200)
 
 @api_view(["POST"])
 def teacher_subjects(request,*args, **kwargs):

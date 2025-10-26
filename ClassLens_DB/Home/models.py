@@ -37,7 +37,7 @@ class Student(models.Model):
                 fields=['face_embedding'],
                 m=16,                 
                 ef_construction=200,  
-                opclasses=['vector_l2_ops']
+                opclasses=['vector_cosine_ops']
             ),
         ]
     def __str__(self):
