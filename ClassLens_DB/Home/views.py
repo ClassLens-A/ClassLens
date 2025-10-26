@@ -470,7 +470,7 @@ def get_student_attendance(request, *args, **kwargs):
 
             total = student.total_classes
             attended = student.attended_classes
-            percentage = round((attended / total) * 100, 2) if total > 0 else 0
+            percentage = round((attended / total) * 100, 2) if total > 0 else 0.0
 
             result.append({
                 "student_id": student.id,
