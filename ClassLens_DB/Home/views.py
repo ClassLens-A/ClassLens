@@ -449,26 +449,32 @@ def get_student_attendance(request, *args, **kwargs):
                 {"detail": "subject_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Aggregate attendance per subject
-        attendance_data = (
-            AttendanceRecord.objects
-            .filter(class_session__subject__id=subject_id)
-            .values('student__id','student__name')
-            .annotate(
-                total_classes=Count('id'),
-                attended_classes=Count('id', filter=Q(status=True))
+        
+        data = StudentEnrollment.objects.filter(subject_id=subject_id).values_list('student_prn',flat=True)
+ 
+        student_data = Student.objects.filter(
+            prn__in=data
+        ).annotate(
+            total_classes=Count(
+                'attendancerecord',
+                filter=Q(attendancerecord__class_session__subject_id=subject_id)
+            ),
+            attended_classes=Count(
+                'attendancerecord',
+                filter=Q(attendancerecord__class_session__subject_id=subject_id, 
+                           attendancerecord__status=True)
             )
         )
-
         result = []
-        for record in attendance_data:
-            total = record['total_classes']
-            attended = record['attended_classes']
+        for student in student_data:
+
+            total = student.total_classes
+            attended = student.attended_classes
             percentage = round((attended / total) * 100, 2) if total > 0 else 0
 
             result.append({
-                "student_id": record['student__id'],
-                "student_name": record['student__name'],
+                "student_id": student.id,
+                "student_name": student.name,
                 "total_classes": total,
                 "attended_classes": attended,
                 "attendance_percentage": percentage

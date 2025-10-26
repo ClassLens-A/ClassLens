@@ -27,7 +27,7 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
     inference_app(
         image=image_path,
         output_path=restored_group_photo,
-        background_enhance=True,
+        background_enhance=False,
         face_upsample=True,
         upscale=2,
         codeformer_fidelity=0.7 
