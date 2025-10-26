@@ -2,6 +2,7 @@ from celery import shared_task
 import matplotlib.pyplot as plt
 import cv2
 import os
+import shutil
 from codeformer.app import inference_app
 from rest_framework.response import Response
 from deepface import DeepFace
@@ -18,20 +19,27 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
 
     image = cv2.imread(image_path)
     session = ClassSession.objects.get(id=class_session_id)
-    restored_group_photo = image_path.replace(".", "_restored.")
+
+    restored_filename = f"restored_{uuid.uuid4()}.jpeg"
+    restored_group_photo_path = settings.MEDIA_ROOT / 'images' / restored_filename
+    
+    (settings.MEDIA_ROOT / 'images').mkdir(parents=True, exist_ok=True)
+
     if image is None:
         print("Error: Unable to load image. {image_path} may be incorrect.")
         return
     print(f'Image processing started for {image_path}')
 
-    inference_app(
+    path=inference_app(
         image=image_path,
-        output_path=restored_group_photo,
         background_enhance=False,
         face_upsample=True,
         upscale=2,
         codeformer_fidelity=0.7 
     )
+
+    shutil.move(path, restored_group_photo_path)
+    restored_group_photo = str(restored_group_photo_path)
 
     image=cv2.imread(restored_group_photo)
 
