@@ -1,5 +1,6 @@
 from rest_framework import status
 import string
+from django.db.models import F
 from rest_framework.decorators import api_view, parser_classes
 from deepface import DeepFace
 from PIL import Image
@@ -574,7 +575,7 @@ def get_absentees_list(request, *args, **kwargs):
     if not class_session_id:
         return Response({"error": "Class Session ID is required"}, status=400)
     
-    absentees_students=AttendanceRecord.objects.filter(class_session_id=class_session_id, status=False).values_list('student__id', 'student__name', 'student__prn')
+    absentees_students=AttendanceRecord.objects.filter(class_session_id=class_session_id, status=False).annotate(student_id=F('student__id'),student_name=F('student__name'),student_prn=F('student__prn')).values('student_id', 'student_name', 'student_prn')
 
     return Response({"students": absentees_students}, status=status.HTTP_200_OK)
 
