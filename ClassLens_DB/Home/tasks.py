@@ -127,5 +127,6 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
         "image_url": image_url,
         "class_session_id": class_session_id,
         "present_count": len(present_student_prns),
-        "absent_count": len(absent_student_prns)
+        "absent_count": len(absent_student_prns),
+        "subject": session.subject.name
     }
