@@ -605,3 +605,30 @@ def attendance_status(request, task_id,*args, **kwargs):
         return Response({"status": task.status, "result": task.result}, status=500)
     
     return Response({"status": task.status,"result":{"num_faces":0,"image_url":""}}, status=202)
+
+@api_view(["GET"])
+def teacher_profile(request,teacher_id, *args, **kwargs):
+    print(teacher_id)
+    if not teacher_id:
+        return Response({"error": "Teacher ID is required"}, status=400)
+    try:
+        teacher = get_object_or_404(Teacher, id=teacher_id)
+        total_Subject=TeacherSubject.objects.filter(teacher_id_id=teacher_id).count()
+        total_Student=StudentEnrollment.objects.filter(
+            subject_id__in=TeacherSubject.objects.filter(teacher_id_id=teacher_id).values_list('subject_id', flat=True)
+        ).count()
+        department = teacher.department.name if teacher.department else None
+        profile_data = {
+            "email": teacher.email,
+            "total_subjects": total_Subject,
+            "total_students": total_Student,
+            "department_name": department,
+            "date_joined": teacher.date_joined
+        }
+        return Response({"teacher_profile": profile_data}, status=200)
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

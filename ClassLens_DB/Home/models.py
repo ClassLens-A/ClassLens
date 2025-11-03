@@ -14,7 +14,7 @@ class Teacher(models.Model):
         Department, 
         on_delete=models.CASCADE, 
     )
-
+    date_joined=models.DateField(null=True,auto_now_add=True)
     def __str__(self):
         return self.name
     
