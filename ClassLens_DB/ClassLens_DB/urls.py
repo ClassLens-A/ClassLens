@@ -19,11 +19,13 @@ from django.urls import path
 from Home import urls
 from django.conf import settings
 from django.conf.urls.static import static
+from DatabaseAdminApp import urls as db_admin_urls
 from django.urls import include
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include(urls)),
+    path("api/", include(db_admin_urls)),
 ]
 
 if settings.DEBUG:
