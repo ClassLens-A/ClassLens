@@ -137,7 +137,6 @@ class TeacherViewSet(viewsets.ModelViewSet):
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all().select_related('department')
     serializer_class = StudentSerializer
-    permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['get'])
     def download_template(self, request):
@@ -146,7 +145,6 @@ class StudentViewSet(viewsets.ModelViewSet):
             'prn': [2021001, 2021002],
             'name': ['Alice Johnson', 'Bob Williams'],
             'email': ['alice@example.com', 'bob@example.com'],
-            'password': ['student123', 'student456'],
             'year': [2, 3],
             'department_name': ['Computer Science', 'Electronics']
         }
@@ -213,7 +211,6 @@ class StudentViewSet(viewsets.ModelViewSet):
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
-    permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['get'])
     def download_template(self, request):
