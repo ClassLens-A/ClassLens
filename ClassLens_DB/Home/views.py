@@ -619,6 +619,7 @@ def teacher_profile(request,teacher_id, *args, **kwargs):
         ).count()
         department = teacher.department.name if teacher.department else None
         profile_data = {
+            "name": teacher.name,
             "email": teacher.email,
             "total_subjects": total_Subject,
             "total_students": total_Student,
