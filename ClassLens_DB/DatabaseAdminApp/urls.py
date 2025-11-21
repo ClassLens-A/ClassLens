@@ -27,9 +27,9 @@ router.register(
 
 urlpatterns = [
     # Authentication
-    # path("login/", admin_login, name="admin-login"),
-    # path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
-    # path("create-user/", create_admin_user, name="create-admin-user"),
+    path("login/", admin_login, name="admin-login"),
+    path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("create-user/", create_admin_user, name="create-admin-user"),
     # CRUD APIs
     path("admin/", include(router.urls)),
 ]
