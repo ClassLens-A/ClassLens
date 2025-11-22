@@ -9,6 +9,7 @@ from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse
 import pandas as pd
 import io
+from .pagination import StudentPagination
 from Home.models import (
     Department, Teacher, Student, Subject, SubjectFromDept,
     StudentEnrollment, TeacherSubject
@@ -19,39 +20,39 @@ from .serializers import (
     TeacherSubjectSerializer
 )
 
-# Authentication Views
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def admin_login(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
+# # Authentication Views
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# def admin_login(request):
+#     username = request.data.get('username')
+#     password = request.data.get('password')
     
-    try:
-        admin = AdminUser.objects.get(username=username, is_active=True)
-        if admin.check_password(password):
-            refresh = RefreshToken()
-            refresh['username'] = admin.username
-            refresh['user_id'] = admin.id
+#     try:
+#         admin = AdminUser.objects.get(username=username, is_active=True)
+#         if admin.check_password(password):
+#             refresh = RefreshToken()
+#             refresh['username'] = admin.username
+#             refresh['user_id'] = admin.id
             
-            return Response({
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-                'username': admin.username
-            })
-        else:
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-    except AdminUser.DoesNotExist:
-        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+#             return Response({
+#                 'access': str(refresh.access_token),
+#                 'refresh': str(refresh),
+#                 'username': admin.username
+#             })
+#         else:
+#             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+#     except AdminUser.DoesNotExist:
+#         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_admin_user(request):
-    """Create new admin user with username and password"""
-    serializer = AdminUserSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def create_admin_user(request):
+#     """Create new admin user with username and password"""
+#     serializer = AdminUserSerializer(data=request.data)
+#     if serializer.is_valid():
+#         serializer.save()
+#         return Response(serializer.data, status=status.HTTP_201_CREATED)
+#     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # Department ViewSet
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -137,6 +138,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all().select_related('department')
     serializer_class = StudentSerializer
+    pagination_class = StudentPagination 
     
     @action(detail=False, methods=['get'])
     def download_template(self, request):
@@ -276,7 +278,6 @@ class SubjectViewSet(viewsets.ModelViewSet):
 class SubjectFromDeptViewSet(viewsets.ModelViewSet):
     queryset = SubjectFromDept.objects.all().select_related('department').prefetch_related('subject')
     serializer_class = SubjectFromDeptSerializer
-    permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['get'])
     def download_template(self, request):
@@ -361,7 +362,6 @@ class SubjectFromDeptViewSet(viewsets.ModelViewSet):
 class StudentEnrollmentViewSet(viewsets.ModelViewSet):
     queryset = StudentEnrollment.objects.all().select_related('subject')
     serializer_class = StudentEnrollmentSerializer
-    permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['get'])
     def download_template(self, request):

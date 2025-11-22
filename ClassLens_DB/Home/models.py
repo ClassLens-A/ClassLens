@@ -54,6 +54,7 @@ class SubjectFromDept(models.Model):
     year = models.IntegerField(null=False)
     subject = models.ManyToManyField(Subject,null=False)
     semester=models.IntegerField(null=False)    
+    
     class Meta:
         unique_together = ('department', 'year','semester')
 
