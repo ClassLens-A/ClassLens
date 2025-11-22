@@ -4,22 +4,78 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-# from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse
 import pandas as pd
 import io
 from Home.models import (
     Department, Teacher, Student, Subject, SubjectFromDept,
-    StudentEnrollment, TeacherSubject
+    StudentEnrollment, TeacherSubject, AdminUser
 )
 from .serializers import (
     DepartmentSerializer, TeacherSerializer, StudentSerializer,
     SubjectSerializer, SubjectFromDeptSerializer, StudentEnrollmentSerializer,
-    TeacherSubjectSerializer
+    TeacherSubjectSerializer, AdminUserSerializer
 )
 
 # Authentication Views
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# def admin_login(request):
+#     username = request.data.get('username')
+#     password = request.data.get('password')
+    
+#     try:
+#         admin = AdminUser.objects.get(username=username, is_active=True)
+#         if admin.check_password(password):
+#             refresh = RefreshToken()
+#             refresh['username'] = admin.username
+#             refresh['user_id'] = admin.id
+            
+#             return Response({
+#                 'access': str(refresh.access_token),
+#                 'refresh': str(refresh),
+#                 'username': admin.username
+#             })
+#         else:
+#             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+#     except AdminUser.DoesNotExist:
+#         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def create_admin_user(request):
+#     """Create new admin user with username and password"""
+#     serializer = AdminUserSerializer(data=request.data)
+#     if serializer.is_valid():
+#         serializer.save()
+#         return Response(serializer.data, status=status.HTTP_201_CREATED)
+#     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+# def get_dashboard_stats(request):
+#     print(f"User: {request.user}") 
+#     print(f"Auth: {request.auth}")
+#     try:
+#         stats = {
+#             "teachers_count": Teacher.objects.count(),
+#             "students_count": Student.objects.count(),
+#             "subjects_count": Subject.objects.count(),
+#         }
+#         return Response(stats, status=status.HTTP_200_OK)
+#     except Exception as e:
+#         return Response(
+#             {"error": "Failed to fetch stats", "details": str(e)}, 
+#             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#         )
+    
+
+
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def admin_login(request):
@@ -29,9 +85,9 @@ def admin_login(request):
     try:
         admin = AdminUser.objects.get(username=username, is_active=True)
         if admin.check_password(password):
-            refresh = RefreshToken()
+            refresh = RefreshToken.for_user(admin)  # Use for_user method
             refresh['username'] = admin.username
-            refresh['user_id'] = admin.id
+            refresh['user_id'] = admin.id  # Make sure this is set
             
             return Response({
                 'access': str(refresh.access_token),
@@ -46,12 +102,40 @@ def admin_login(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_admin_user(request):
-    """Create new admin user with username and password"""
     serializer = AdminUserSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_dashboard_stats(request):
+    print(f"Stats Request User: {request.user}") 
+    print(f"Is Authenticated: {request.user.is_authenticated}")
+    
+    try:
+        stats = {
+            "teachers_count": Teacher.objects.count(),
+            "students_count": Student.objects.count(),
+            "subjects_count": Subject.objects.count(),
+        }
+        return Response(stats, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {"error": "Failed to fetch stats", "details": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+
+
+
+
+
+
+
+
 
 # Department ViewSet
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -434,3 +518,4 @@ class StudentEnrollmentViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
  
+# OverviewStats ViewSet

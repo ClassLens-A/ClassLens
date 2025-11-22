@@ -2,6 +2,7 @@
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 # from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     DepartmentViewSet,
@@ -10,7 +11,9 @@ from .views import (
     SubjectViewSet,
     SubjectFromDeptViewSet,
     StudentEnrollmentViewSet,
-
+    admin_login,
+    create_admin_user,
+    get_dashboard_stats
 )
 
 router = DefaultRouter()
@@ -27,10 +30,11 @@ router.register(
 
 urlpatterns = [
     # Authentication
-    path("login/", admin_login, name="admin-login"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("admin/login/", admin_login, name="admin-login"),
+    path("admin/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("create-user/", create_admin_user, name="create-admin-user"),
     # CRUD APIs
+    path("admin/stats/", get_dashboard_stats, name="admin-stats"),
     path("admin/", include(router.urls)),
 ]
 
