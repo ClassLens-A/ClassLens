@@ -30,18 +30,25 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
         return
     print(f'Image processing started for {image_path}')
 
-    path=inference_app(
-        image=image_path,
-        background_enhance=False,
-        face_upsample=True,
-        upscale=2,
-        codeformer_fidelity=0.7 
-    )
+    try: 
+        path=inference_app(
+            image=image_path,
+            background_enhance=False,
+            face_upsample=True,
+            upscale=2,
+            codeformer_fidelity=0.7 
+        )
+        if not path or not os.path.exists(path):
+            raise ValueError(f"CodeFormer failed to produce an output file for {image_path}")
 
-    shutil.move(path, restored_group_photo_path)
-    restored_group_photo = str(restored_group_photo_path)
+        shutil.move(path, restored_group_photo_path)
+        restored_group_photo = str(restored_group_photo_path)
 
-    image=cv2.imread(restored_group_photo)
+        image=cv2.imread(restored_group_photo)
+    except Exception as e:
+        print(f"Error during CodeFormer enhancement: {e}")
+        # If enhancement fails, we can't continue.
+        return 
 
     try:
         all_faces = DeepFace.represent(
@@ -52,6 +59,7 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
             align=True
         )
     except ValueError:
+        print("Error: Unable to detect faces in the image.")
         return
 
     for face_img in all_faces:
@@ -78,14 +86,15 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
     
     SIMILARITY_THRESHOLD = 0.70 
 
-    try:
-
+    try:    
         enrolled_prns = StudentEnrollment.objects.filter(
             subject=session.subject
         ).values_list('student_prn', flat=True)
 
-        enrolled_students = Student.objects.filter(
-            prn__in=enrolled_prns
+        all_enrolled_students = Student.objects.filter(prn__in=enrolled_prns)
+
+        valid_students = all_enrolled_students.filter(
+            face_embedding__isnull=False
         ).only('prn', 'name', 'face_embedding')
 
     except (ClassSession.DoesNotExist, ValueError) as e:
@@ -97,7 +106,7 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
     for face in all_faces:
         embedding = face['embedding']
 
-        best_match = enrolled_students.annotate(
+        best_match = valid_students.annotate(
             distance=CosineDistance('face_embedding', embedding)
         ).order_by('distance').first()
 
@@ -109,16 +118,17 @@ def evaluate_attendance(image_path,class_session_id:int,scheme, host):
 
     present_records = [
         AttendanceRecord(class_session=session, student=student, status=True, marked_at=session.class_datetime)
-        for student in enrolled_students if student.prn in present_student_prns
+        for student in all_enrolled_students if student.prn in present_student_prns
     ]
     AttendanceRecord.objects.bulk_create(present_records)
 
-    enrolled_student_prns = set(enrolled_students.values_list('prn', flat=True))
+    # enrolled_student_prns = set(all_enrolled_students.values_list('prn', flat=True))
+    enrolled_student_prns = set(enrolled_prns)
     absent_student_prns = enrolled_student_prns - present_student_prns
 
     absent_records = [
         AttendanceRecord(class_session=session, student=student, status=False, marked_at=session.class_datetime)
-        for student in enrolled_students if student.prn in absent_student_prns
+        for student in all_enrolled_students if student.prn in absent_student_prns
     ]
     AttendanceRecord.objects.bulk_create(absent_records)
 
