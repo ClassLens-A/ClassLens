@@ -3,7 +3,7 @@
 from rest_framework import serializers
 from Home.models import (
     Department, Teacher, Student, Subject, SubjectFromDept,
-    StudentEnrollment, TeacherSubject
+    StudentEnrollment, TeacherSubject, AdminUser
 )
 
 class DepartmentSerializer(serializers.ModelSerializer):
@@ -75,3 +75,22 @@ class TeacherSubjectSerializer(serializers.ModelSerializer):
 #         admin.set_password(password)
 #         admin.save()
 #         return admin
+
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminUser
+        fields = ['id', 'username', 'password', 'is_active']
+        extra_kwargs = {
+            'password': {'write_only': True} # Never send the password back in the response
+        }
+
+    def create(self, validated_data):
+        user = AdminUser(
+            username=validated_data['username'],
+            is_active=validated_data.get('is_active', True)
+        )
+        user.set_password(validated_data['password'])
+        user.save()
+        return user

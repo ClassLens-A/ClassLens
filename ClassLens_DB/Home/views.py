@@ -1,12 +1,13 @@
 from rest_framework import status
 import string
 from django.db.models import F
-from rest_framework.decorators import api_view, parser_classes
+from rest_framework.decorators import api_view, parser_classes,permission_classes
 from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, StudentEnrollment,TeacherSubject, ClassSession, Subject
+from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, StudentEnrollment,TeacherSubject, ClassSession, Subject, AdminUser
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.db.models import Count, Q
 from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
@@ -29,7 +30,7 @@ from .tasks import evaluate_attendance
 from django.core.files.storage import default_storage
 from celery.result import AsyncResult
 from pgvector.django import CosineDistance
-
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -632,3 +633,33 @@ def teacher_profile(request,teacher_id, *args, **kwargs):
             {"detail": "Something went wrong"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    
+
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def admin_login(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    
+    try:
+        admin = AdminUser.objects.get(username=username, is_active=True)
+        if admin.check_password(password):
+            
+            # --- TOKEN GENERATION ---
+            refresh = RefreshToken()
+            
+            # This is the KEY part. We actully inject the ID into the token
+            refresh['user_id'] = admin.id 
+            refresh['username'] = admin.username
+            
+            return Response({
+                'access': str(refresh.access_token), # Access token inherits 'user_id'
+                'refresh': str(refresh),
+                'username': admin.username
+            })
+        else:
+            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+    except AdminUser.DoesNotExist:
+        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)

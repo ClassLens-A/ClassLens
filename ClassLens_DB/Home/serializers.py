@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Department,Subject
+from .models import Department,Subject,AdminUser
 
 class DepartmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -10,3 +10,4 @@ class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
         fields = ['id','code','name']
+

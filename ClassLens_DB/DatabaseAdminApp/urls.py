@@ -2,6 +2,7 @@
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 # from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     DepartmentViewSet,
@@ -10,7 +11,9 @@ from .views import (
     SubjectViewSet,
     SubjectFromDeptViewSet,
     StudentEnrollmentViewSet,
-
+    admin_login,
+    get_dashboard_stats,
+    AdminUserViewSet,
 )
 
 router = DefaultRouter()
@@ -24,13 +27,14 @@ router.register(
 router.register(
     r"student-enrollments", StudentEnrollmentViewSet, basename="student-enrollment"
 )
+router.register(r"admin-users", AdminUserViewSet, basename="admin-user")
 
 urlpatterns = [
-    # # Authentication
-    # path("login/", admin_login, name="admin-login"),
-    # path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
-    # path("create-user/", create_admin_user, name="create-admin-user"),
+    # Authentication
+    path("admin/login/", admin_login, name="admin-login"),
+    path("admin/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     # CRUD APIs
+    path("admin/stats/", get_dashboard_stats, name="admin-stats"),
     path("admin/", include(router.urls)),
 ]
 
@@ -88,4 +92,13 @@ StudentEnrollments:
 - GET    /api/admin/student-enrollments/{id}/ - Get enrollment
 - PUT    /api/admin/student-enrollments/{id}/ - Update enrollment
 - DELETE /api/admin/student-enrollments/{id}/ - Delete enrollment
+
+CRUD for AdminUser:
+- GET    /api/admin/admin-users/       -> list admins
+- POST   /api/admin/admin-users/       -> create admin
+- GET    /api/admin/admin-users/{id}/  -> retrieve admin
+- PUT    /api/admin/admin-users/{id}/  -> full update
+- PATCH  /api/admin/admin-users/{id}/  -> partial update
+- DELETE /api/admin/admin-users/{id}/  -> delete admin
+  
 """
