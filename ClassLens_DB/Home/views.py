@@ -6,7 +6,7 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, StudentEnrollment,TeacherSubject, ClassSession, Subject
+from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, AttendancePhotos,StudentEnrollment,TeacherSubject, ClassSession, Subject
 from django.db.models import Count, Q
 from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
@@ -500,13 +500,13 @@ def mark_attendance(request, *args, **kwargs):
     API endpoint to start an attendance session.
     Expects form-data with: photo, subject_id, teacher_id, department_id, year
     """
-    photo = request.FILES.get("photo")
+    photos = request.FILES.getlist("photo")
     subject_id = request.data.get("subjectID")
     teacher_id = request.data.get("teacherID")
     departmentName = request.data.get("departmentName")
     year = request.data.get("year")
 
-    if not all([photo, subject_id, teacher_id, departmentName, year]):
+    if not all([photos, subject_id, teacher_id, departmentName, year]):
         return Response({"error": "Missing required fields (photo, subject_id, teacher_id, department_id, year)."}, status=400)
 
     try:
@@ -516,10 +516,15 @@ def mark_attendance(request, *args, **kwargs):
             subject = get_object_or_404(Subject, id=subject_id),
             teacher = get_object_or_404(Teacher, id=teacher_id),
             class_datetime = datetime.now(),
-            attendance_photo = photo
         )
 
-        task = evaluate_attendance.delay(class_session.attendance_photo.path, class_session.id,request.scheme, request.get_host())
+        for photo in photos:
+            AttendancePhotos.objects.create(
+                class_session=class_session,
+                photo=photo
+            )
+
+        task = evaluate_attendance.delay(class_session.id,request.scheme, request.get_host())
 
         return Response({
             "message": "Attendance processing started. You will be notified once it's done.",
@@ -570,12 +575,13 @@ def teacher_subjects(request,*args, **kwargs):
         )
 
 @api_view(["POST"])
-def get_absentees_list(request, *args, **kwargs):
+def get_list(request, *args, **kwargs):
     class_session_id = request.data.get("class_session_id")
+    isPresent = request.data.get("isPresent")
     if not class_session_id:
         return Response({"error": "Class Session ID is required"}, status=400)
     
-    absentees_students=AttendanceRecord.objects.filter(class_session_id=class_session_id, status=False).annotate(student_name=F('student__name'),student_prn=F('student__prn')).values('student_id', 'student_name', 'student_prn')
+    absentees_students=AttendanceRecord.objects.filter(class_session_id=class_session_id, status=isPresent).annotate(student_name=F('student__name'),student_prn=F('student__prn')).values('student_id', 'student_name', 'student_prn')
 
     return Response({"students": absentees_students}, status=status.HTTP_200_OK)
 
@@ -587,7 +593,7 @@ def change_attendance(request, *args, **kwargs):
     for student_id in student_list:
         attendance_record = AttendanceRecord.objects.filter(class_session_id=class_session_id, student_id=student_id).first()
         if attendance_record:
-            attendance_record.status = True
+            attendance_record.status = not attendance_record.status
             attendance_record.save()
     return Response(status=status.HTTP_200_OK)
 

@@ -86,10 +86,14 @@ class ClassSession(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE)
     class_datetime = models.DateTimeField(null=False)
-    attendance_photo = models.ImageField(upload_to='attendance_photos/', null=True, blank=True) 
 
     def __str__(self):
         return f"Class for {self.subject.name} at {self.class_datetime}"
+
+class AttendancePhotos(models.Model):
+    class_session = models.ForeignKey(ClassSession, on_delete=models.CASCADE,related_name='photos')
+    photo = models.ImageField(upload_to='attendance_photos/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
 
 class AttendanceRecord(models.Model):
     class_session = models.ForeignKey(ClassSession, on_delete=models.CASCADE)

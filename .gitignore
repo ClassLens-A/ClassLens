@@ -38,3 +38,5 @@ ClassLens_DB/CodeFormer/
 # OS Files
 .DS_Store
 Thumbs.db
+GFPGANv1.4.pth
+gfpgan
