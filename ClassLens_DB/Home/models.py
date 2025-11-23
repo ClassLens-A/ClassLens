@@ -61,7 +61,7 @@ class SubjectFromDept(models.Model):
         return f"{self.department} - {self.year}"
     
 class StudentEnrollment(models.Model):
-    student_prn = models.BigIntegerField(unique=True, null=False)
+    student_prn = models.BigIntegerField(null=False)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
 
     class Meta:
