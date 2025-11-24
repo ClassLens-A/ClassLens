@@ -22,6 +22,7 @@ venv/
 .venv/
 classlens-vnv/
 .classlens-env/
+env
 
 ClassLens_DB/CodeFormer/
 
