@@ -575,9 +575,12 @@ def teacher_subjects(request,*args, **kwargs):
         )
 
 @api_view(["POST"])
-def get_list(request, *args, **kwargs):
+def get_present_absent_list(request, *args, **kwargs):
     class_session_id = request.data.get("class_session_id")
     isPresent = request.data.get("isPresent")
+    
+    if isinstance(isPresent, str):
+        isPresent = isPresent.lower() == "true"
     if not class_session_id:
         return Response({"error": "Class Session ID is required"}, status=400)
     

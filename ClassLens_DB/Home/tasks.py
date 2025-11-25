@@ -164,7 +164,7 @@ def evaluate_attendance(class_session_id:int,scheme, host):
 
     return {
         "num_faces": total_faces,
-        "image_url": json.dumps(image_urls),
+        "image_url": image_urls[0],
         "class_session_id": class_session_id,
         "present_count": len(present_student_prns),
         "absent_count": len(enrolled_prns) - len(present_student_prns),
