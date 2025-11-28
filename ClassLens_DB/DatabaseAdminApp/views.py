@@ -1,5 +1,3 @@
-# views.py
-
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -34,9 +32,6 @@ class IsSuperUser(BasePermission):
           and getattr(request.user, "is_superuser", False)
       )
 
-
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def admin_login(request):
@@ -46,9 +41,9 @@ def admin_login(request):
     try:
         admin = AdminUser.objects.get(username=username, is_active=True)
         if admin.check_password(password):
-            refresh = RefreshToken.for_user(admin)  # Use for_user method
+            refresh = RefreshToken.for_user(admin)
             refresh['username'] = admin.username
-            refresh['user_id'] = admin.id  # Make sure this is set
+            refresh['user_id'] = admin.id 
             
             return Response({
                 'access': str(refresh.access_token),
@@ -64,10 +59,6 @@ class AdminUserViewSet(viewsets.ModelViewSet):
   
     queryset = AdminUser.objects.all().order_by("id")
     serializer_class = AdminUserSerializer
-    # Only logged-in superusers can manage admin accounts:
-    # permission_classes = [IsAuthenticated, IsSuperUser]
-
-    # If you want to forbid deleting yourself, you can override destroy:
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.id == request.user.id:
@@ -98,22 +89,11 @@ def get_dashboard_stats(request):
         )
 
 
-
-
-
-
-
-
-
-
-
-# Department ViewSet
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
     permission_classes = [IsAuthenticated]
 
-# Teacher ViewSet
 class TeacherViewSet(viewsets.ModelViewSet):
     queryset = Teacher.objects.all().select_related('department')
     serializer_class = TeacherSerializer
@@ -122,7 +102,6 @@ class TeacherViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def download_template(self, request):
         """Download Excel template for bulk teacher upload"""
-        # Create sample data
         data = {
             'name': ['John Doe', 'Jane Smith'],
             'email': ['john@example.com', 'jane@example.com'],
@@ -130,7 +109,6 @@ class TeacherViewSet(viewsets.ModelViewSet):
         }
         df = pd.DataFrame(data)
         
-        # Create Excel file in memory
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Teachers')
@@ -187,7 +165,6 @@ class TeacherViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-# Student ViewSet
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all().select_related('department')
     serializer_class = StudentSerializer
@@ -262,7 +239,6 @@ class StudentViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-# Subject ViewSet
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
@@ -327,7 +303,6 @@ class SubjectViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-# SubjectFromDept ViewSet
 class SubjectFromDeptViewSet(viewsets.ModelViewSet):
     queryset = SubjectFromDept.objects.all().select_related('department').prefetch_related('subject')
     serializer_class = SubjectFromDeptSerializer
@@ -411,7 +386,6 @@ class SubjectFromDeptViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-# StudentEnrollment ViewSet
 class StudentEnrollmentViewSet(viewsets.ModelViewSet):
     queryset = StudentEnrollment.objects.all().select_related('subject')
     serializer_class = StudentEnrollmentSerializer
@@ -487,4 +461,3 @@ class StudentEnrollmentViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
  
-# OverviewStats ViewSet
