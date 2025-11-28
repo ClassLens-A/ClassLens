@@ -42,3 +42,7 @@ Thumbs.db
 
 GFPGANv1.4.pth
 gfpgan
+
+# Firebase credentials (NEVER commit these!)
+firebase-service-account.json
+**/firebase-service-account.json
