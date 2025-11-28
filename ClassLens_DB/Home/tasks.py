@@ -13,6 +13,7 @@ from scipy.spatial.distance import cosine
 import json
 import sys, types
 import torchvision.transforms.functional as F
+from django.db.models import F as DbF
 
 module_name = 'torchvision.transforms.functional_tensor'
 
@@ -31,7 +32,7 @@ def patched_torch_load(f, *args, **kwargs):
 torch.load = patched_torch_load
 
 from gfpgan import GFPGANer
-from .models import Student, AttendanceRecord, ClassSession, StudentEnrollment
+from .models import Student, AttendanceRecord, ClassSession, StudentEnrollment, StudentAttendancePercentage
 
 restorer = GFPGANer(
     model_path='GFPGANv1.4.pth',
@@ -42,7 +43,7 @@ restorer = GFPGANer(
 )
 
 @shared_task
-def evaluate_attendance(class_session_id:int,scheme, host):
+def evaluate_attendance(total_sessions,class_session_id:int,scheme, host):
 
     session = ClassSession.objects.get(id=class_session_id)
     images=session.photos.all()
@@ -160,11 +161,21 @@ def evaluate_attendance(class_session_id:int,scheme, host):
                 )
             )
 
+            StudentAttendancePercentage.objects.filter(
+                student=student_obj,
+                subject=session.subject
+            ).update(present_count=DbF('present_count') + (1 if is_present else 0))
+
+            StudentAttendancePercentage.objects.filter(
+                student=student_obj,
+                subject=session.subject
+            ).update(attendancePercentage=(DbF('present_count')*100.0)/total_sessions)
+
     AttendanceRecord.objects.bulk_create(records_to_create)
 
     return {
         "num_faces": total_faces,
-        "image_url": image_urls[0],
+        "image_url": image_urls[0] if image_urls else None,
         "class_session_id": class_session_id,
         "present_count": len(present_student_prns),
         "absent_count": len(enrolled_prns) - len(present_student_prns),

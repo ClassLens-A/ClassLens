@@ -2,6 +2,9 @@ from django.db import models
 from pgvector.django import VectorField, IvfflatIndex, HnswIndex
 from django.contrib.auth.hashers import make_password, check_password
 
+from django.db import models
+from django.db.models import F
+
 class Department(models.Model):
     name = models.TextField(unique=True, null=False)
     def __str__(self):
@@ -111,7 +114,9 @@ class AttendanceRecord(models.Model):
     
 class StudentAttendancePercentage(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
-    subjectAttendancePercentage = models.JSONField(default=dict,null=True, blank=True)
+    subject=models.ForeignKey(Subject,on_delete=models.CASCADE)
+    present_count=models.IntegerField(null=False,default=0)
+    attendancePercentage = models.FloatField(null=False,default=0.0)
 
 class AdminUser(models.Model):
     username = models.CharField(max_length=150, unique=True)

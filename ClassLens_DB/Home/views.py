@@ -6,10 +6,11 @@ from deepface import DeepFace
 from PIL import Image
 import numpy as np
 from rest_framework.response import Response
-from .models import Department, Student, Teacher, SubjectFromDept, AttendanceRecord, StudentEnrollment,TeacherSubject, ClassSession, Subject,AttendancePhotos,AdminUser
+from .models import Department, Student, Teacher, SubjectFromDept, StudentAttendancePercentage,AttendanceRecord, StudentEnrollment,TeacherSubject, ClassSession, Subject,AttendancePhotos,AdminUser
 from django.db.models import Count, Q
 from .serializers import DepartmentSerializer,SubjectSerializer
 from rest_framework.parsers import MultiPartParser
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
 from django.shortcuts import get_object_or_404
 import traceback
@@ -36,7 +37,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
-
 @api_view(["GET"])
 def getDepartments(request):
     if request.method == "GET":
@@ -46,7 +46,6 @@ def getDepartments(request):
     return Response(
         {"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
     )
-
 
 @api_view(["POST"])
 def registerNewTeacher(request, *args, **kwargs):
@@ -83,7 +82,6 @@ def registerNewTeacher(request, *args, **kwargs):
             {"detail": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
 
-
 @api_view(["POST"])
 def validateStudent(request, *args, **kwargs):
     prn = request.data.get("prn")
@@ -116,7 +114,6 @@ def validateStudent(request, *args, **kwargs):
             {"detail": "Method not allowed"},
             status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
-
 
 @api_view(["POST"])
 def validateTeacher(request, *args, **kwargs):
@@ -175,7 +172,6 @@ def get_subject_details(request, *args, **kwargs):
                 {"detail": "Something went wrong"},
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
-
 
 @api_view(["POST"])
 def send_otp(request, *args, **kwargs):
@@ -263,7 +259,6 @@ def send_otp(request, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-
 @api_view(["POST"])
 def verify_email(request, *args, **kwargs):
     try:
@@ -307,7 +302,6 @@ def verify_email(request, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-
 @api_view(["POST"])
 def verify_prn(request, *args, **kwargs):
     try:
@@ -341,7 +335,6 @@ def verify_prn(request, *args, **kwargs):
             {"detail": "Method not allowed"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
 
 @api_view(["POST"])
 def verify_otp(request, *args, **kwargs):
@@ -451,34 +444,20 @@ def get_student_attendance(request, *args, **kwargs):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         
-        data = StudentEnrollment.objects.filter(subject_id=subject_id).values_list('student_prn',flat=True)
- 
-        student_data = Student.objects.filter(
-            prn__in=data
-        ).annotate(
-            total_classes=Count(
-                'attendancerecord',
-                filter=Q(attendancerecord__class_session__subject_id=subject_id)
-            ),
-            attended_classes=Count(
-                'attendancerecord',
-                filter=Q(attendancerecord__class_session__subject_id=subject_id, 
-                           attendancerecord__status=True)
-            )
-        )
+        total_sessions = ClassSession.objects.filter(subject_id=subject_id).count()
+
+        attendance_data = StudentAttendancePercentage.objects.filter(
+            subject_id=subject_id
+        ).select_related('student')
+
         result = []
-        for student in student_data:
-
-            total = student.total_classes
-            attended = student.attended_classes
-            percentage = round((attended / total) * 100, 2) if total > 0 else 0.0
-
+        for record in attendance_data:
             result.append({
-                "student_id": student.id,
-                "student_name": student.name,
-                "total_classes": total,
-                "attended_classes": attended,
-                "attendance_percentage": percentage
+                "student_id": record.student.id,
+                "student_name": record.student.name,
+                "total_classes": total_sessions,
+                "attended_classes": record.present_count,
+                "attendance_percentage": record.attendancePercentage
             })
 
         return Response(
@@ -518,13 +497,17 @@ def mark_attendance(request, *args, **kwargs):
             class_datetime = datetime.now(),
         )
 
+        total_sessions=ClassSession.objects.filter(
+            subject=class_session.subject
+        ).count()
+
         for photo in photos:
             AttendancePhotos.objects.create(
                 class_session=class_session,
                 photo=photo
             )
 
-        task = evaluate_attendance.delay(class_session.id,request.scheme, request.get_host())
+        task = evaluate_attendance.delay(total_sessions,class_session.id,request.scheme, request.get_host())
 
         return Response({
             "message": "Attendance processing started. You will be notified once it's done.",
@@ -593,10 +576,24 @@ def change_attendance(request, *args, **kwargs):
     class_session_id = request.data.get("class_session_id")
     student_list=request.data.get("student_list")
 
+    total_sessions=ClassSession.objects.filter(
+        subject=ClassSession.objects.get(id=class_session_id).subject
+    ).count()
+
     for student_id in student_list:
         attendance_record = AttendanceRecord.objects.filter(class_session_id=class_session_id, student_id=student_id).first()
         if attendance_record:
             attendance_record.status = not attendance_record.status
+            StudentAttendancePercentage.objects.filter(
+                student=attendance_record.student,
+                subject=attendance_record.class_session.subject
+            ).update(present_count=F('present_count') + (1 if attendance_record.status else -1))
+
+            StudentAttendancePercentage.objects.filter(
+                student=attendance_record.student,
+                subject=attendance_record.class_session.subject
+            ).update(attendancePercentage=F('present_count')/total_sessions * 100)
+
             attendance_record.save()
     return Response(status=status.HTTP_200_OK)
 
@@ -643,9 +640,6 @@ def teacher_profile(request,teacher_id, *args, **kwargs):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     
-
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def admin_login(request):
@@ -656,15 +650,13 @@ def admin_login(request):
         admin = AdminUser.objects.get(username=username, is_active=True)
         if admin.check_password(password):
             
-            # --- TOKEN GENERATION ---
             refresh = RefreshToken()
             
-            # This is the KEY part. We actully inject the ID into the token
             refresh['user_id'] = admin.id 
             refresh['username'] = admin.username
             
             return Response({
-                'access': str(refresh.access_token), # Access token inherits 'user_id'
+                'access': str(refresh.access_token),
                 'refresh': str(refresh),
                 'username': admin.username
             })

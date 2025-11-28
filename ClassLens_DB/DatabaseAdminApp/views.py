@@ -10,7 +10,7 @@ import io
 from .pagination import StudentPagination
 from Home.models import (
     Department, Teacher, Student, Subject, SubjectFromDept,
-    StudentEnrollment, TeacherSubject, AdminUser
+    StudentEnrollment, TeacherSubject, AdminUser, StudentAttendancePercentage
 )
 from .serializers import (
     DepartmentSerializer, TeacherSerializer, StudentSerializer,
@@ -448,6 +448,12 @@ class StudentEnrollmentViewSet(viewsets.ModelViewSet):
                     StudentEnrollment.objects.create(
                         student_prn=int(row['student_prn']),
                         subject=subject
+                    )
+                    StudentAttendancePercentage.objects.create(
+                        student=Student.objects.get(prn=int(row['student_prn'])),
+                        subject=subject,
+                        present_count=0,
+                        attendancePercentage=0.0
                     )
                     created_count += 1
                 except Exception as e:
