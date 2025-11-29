@@ -1,7 +1,7 @@
 from django.urls import path
 from django.urls import include
 
-from Home.views import getDepartments,registerNewStudent,mark_attendance,teacher_profile,registerNewTeacher,validateStudent,validateTeacher,send_otp,verify_otp,set_password,get_subject_details,verify_email, verify_prn, get_student_attendance,attendance_status,teacher_subjects, get_present_absent_list,change_attendance
+from Home.views import getDepartments,registerNewStudent,mark_attendance,teacher_profile,registerNewTeacher,validateStudent,validateTeacher,send_otp,verify_otp,set_password,get_subject_details,verify_email, verify_prn, get_student_attendance,attendance_status,teacher_subjects, get_present_absent_list,change_attendance,get_student_dashboard,update_notification_token,remove_notification_token
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -24,6 +24,9 @@ urlpatterns = [
     path('getPresentAbsentList/',get_present_absent_list, name='get_present_absent_list'),
     path('changeAttendance/',change_attendance, name='change_attendance'),
     path('teacherProfile/<int:teacher_id>/',teacher_profile, name='teacher_profile'),
+    path('student/dashboard/', get_student_dashboard, name='get_student_dashboard'),
+    path('student/notification-token/', update_notification_token, name='update_notification_token'),
+    path('student/notification-token/remove/', remove_notification_token, name='remove_notification_token'),
 ]
 
 if settings.DEBUG:

@@ -14,6 +14,7 @@ import json
 import sys, types
 import torchvision.transforms.functional as F
 from django.db.models import F as DbF
+from firebase_admin import credentials, messaging
 
 module_name = 'torchvision.transforms.functional_tensor'
 
@@ -41,6 +42,48 @@ restorer = GFPGANer(
     channel_multiplier=2,
     bg_upsampler=None
 )
+
+def initialize_firebase():
+    if not firebase_admin._apps:
+        cred_path = os.path.join(settings.BASE_DIR, 'firebase-service-account.json')
+        if os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+            firebase_admin.initialize_app(cred)
+            print("Firebase Admin SDK initialized")
+        else:
+            print(f"Warning: Firebase credentials not found at {cred_path}")
+
+def send_attendance_notifications(student_records, subject_name, class_datetime):
+    """
+    Send push notifications to all students with valid FCM tokens.
+    """
+    initialize_firebase()
+    
+    if not firebase_admin._apps:
+        print("Firebase not initialized, skipping notifications")
+        return
+    
+    for student, is_present in student_records:
+        if student.notification_token:
+            try:
+                status_text = "Present ✓" if is_present else "Absent ✗"
+                message = messaging.Message(
+                    notification=messaging.Notification(
+                        title=f"Attendance Marked - {subject_name}",
+                        body=f"You were marked {status_text} for the class on {class_datetime.strftime('%d %b %Y, %I:%M %p')}",
+                    ),
+                    data={
+                        "type": "attendance",
+                        "subject": subject_name,
+                        "status": "present" if is_present else "absent",
+                        "datetime": class_datetime.isoformat(),
+                    },
+                    token=student.notification_token,
+                )
+                response = messaging.send(message)
+                print(f"Notification sent to {student.name}: {response}")
+            except Exception as e:
+                print(f"Failed to send notification to {student.name}: {e}")
 
 @shared_task
 def evaluate_attendance(total_sessions,class_session_id:int,scheme, host):
@@ -148,6 +191,8 @@ def evaluate_attendance(total_sessions,class_session_id:int,scheme, host):
         image_urls.append(f"{scheme}://{host}/media/images/{filename}")
 
     records_to_create = []
+    student_notification_list = [] 
+    
     for prn in enrolled_prns:
         student_obj = student_obj_map.get(prn)
         if student_obj:
@@ -160,6 +205,8 @@ def evaluate_attendance(total_sessions,class_session_id:int,scheme, host):
                     marked_at=session.class_datetime
                 )
             )
+            
+            student_notification_list.append((student_obj, is_present))
 
             StudentAttendancePercentage.objects.filter(
                 student=student_obj,
@@ -172,6 +219,12 @@ def evaluate_attendance(total_sessions,class_session_id:int,scheme, host):
             ).update(attendancePercentage=(DbF('present_count')*100.0)/total_sessions)
 
     AttendanceRecord.objects.bulk_create(records_to_create)
+    
+    send_attendance_notifications(
+        student_notification_list,
+        session.subject.name,
+        session.class_datetime
+    )
 
     return {
         "num_faces": total_faces,

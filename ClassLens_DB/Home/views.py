@@ -101,7 +101,7 @@ def validateStudent(request, *args, **kwargs):
             )
         else:
             return Response(
-                {"message": "Student validated successfully", "student_id": student.id, 'student_name': student.name},
+                {"message": "Student validated successfully", "student_id": student.id, 'student_name': student.name, 'prn': student.prn},
                 status=status.HTTP_200_OK,
             )
     except Student.DoesNotExist:
@@ -664,3 +664,149 @@ def admin_login(request):
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
     except AdminUser.DoesNotExist:
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+@api_view(["POST"])
+def get_student_dashboard(request, *args, **kwargs):
+    """
+    Fetches all subjects and attendance data for a specific student.
+    Expects: student_id
+    """
+    try:
+        student_id = request.data.get("student_id")
+
+        if student_id is None:
+            return Response(
+                {"detail": "student_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        student = get_object_or_404(Student, id=student_id)
+
+        # Get all subjects the student is enrolled in (uses student_prn, not FK)
+        enrollments = StudentEnrollment.objects.filter(student_prn=student.prn).select_related('subject')
+
+        subjects_data = []
+        for enrollment in enrollments:
+            subject = enrollment.subject
+            
+            # Get total sessions for this subject
+            total_sessions = ClassSession.objects.filter(subject=subject).count()
+            
+            # Calculate attendance directly from AttendanceRecord (source of truth)
+            attendance_stats = AttendanceRecord.objects.filter(
+                student=student,
+                class_session__subject=subject
+            ).aggregate(
+                attended=Count('id', filter=Q(status=True)),
+                total_marked=Count('id')
+            )
+
+            attended = attendance_stats['attended'] or 0
+            # Calculate percentage based on total sessions (not just marked ones)
+            percentage = (attended / total_sessions * 100) if total_sessions > 0 else 0.0
+
+            # Get teacher name for the subject
+            teacher_subject = TeacherSubject.objects.filter(subject=subject).select_related('teacher_id').first()
+            teacher_name = teacher_subject.teacher_id.name if teacher_subject else "N/A"
+
+            subjects_data.append({
+                "id": subject.id,
+                "name": subject.name,
+                "code": subject.code,
+                "teacher": teacher_name,
+                "total": total_sessions,
+                "attended": attended,
+                "percentage": round(float(percentage), 2)
+            })
+
+        # Get recent attendance activity (last 5 records)
+        recent_records = AttendanceRecord.objects.filter(
+            student=student
+        ).select_related('class_session__subject').order_by('-class_session__class_datetime')[:5]
+
+        recent_activity = []
+        for record in recent_records:
+            recent_activity.append({
+                "subject": record.class_session.subject.name,
+                "status": "Present" if record.status else "Absent",
+                "date": record.class_session.class_datetime.isoformat()
+            })
+
+        return Response({
+            "student_name": student.name,
+            "prn": student.prn,
+            "subjects": subjects_data,
+            "recent_activity": recent_activity
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+def update_notification_token(request, *args, **kwargs):
+    """
+    Updates the FCM notification token for a student.
+    Expects: student_id, notification_token
+    """
+    try:
+        student_id = request.data.get("student_id")
+        notification_token = request.data.get("notification_token")
+
+        if student_id is None or notification_token is None:
+            return Response(
+                {"detail": "student_id and notification_token are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        student = get_object_or_404(Student, id=student_id)
+        student.notification_token = notification_token
+        student.save()
+
+        return Response(
+            {"message": "Notification token updated successfully"},
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+def remove_notification_token(request, *args, **kwargs):
+    """
+    Removes the FCM notification token for a student (on logout).
+    Expects: student_id
+    """
+    try:
+        student_id = request.data.get("student_id")
+
+        if student_id is None:
+            return Response(
+                {"detail": "student_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        student = get_object_or_404(Student, id=student_id)
+        student.notification_token = None
+        student.save()
+
+        return Response(
+            {"message": "Notification token removed successfully"},
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
