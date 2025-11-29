@@ -14,6 +14,7 @@ import json
 import sys, types
 import torchvision.transforms.functional as F
 from django.db.models import F as DbF
+import firebase_admin
 from firebase_admin import credentials, messaging
 
 module_name = 'torchvision.transforms.functional_tensor'

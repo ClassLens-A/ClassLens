@@ -592,7 +592,7 @@ def change_attendance(request, *args, **kwargs):
             StudentAttendancePercentage.objects.filter(
                 student=attendance_record.student,
                 subject=attendance_record.class_session.subject
-            ).update(attendancePercentage=F('present_count')/total_sessions * 100)
+            ).update(attendancePercentage=(F('present_count')*100.0)/total_sessions)
 
             attendance_record.save()
     return Response(status=status.HTTP_200_OK)
@@ -682,32 +682,23 @@ def get_student_dashboard(request, *args, **kwargs):
 
         student = get_object_or_404(Student, id=student_id)
 
-        # Get all subjects the student is enrolled in (uses student_prn, not FK)
         enrollments = StudentEnrollment.objects.filter(student_prn=student.prn).select_related('subject')
 
         subjects_data = []
         for enrollment in enrollments:
             subject = enrollment.subject
             
-            # Get total sessions for this subject
             total_sessions = ClassSession.objects.filter(subject=subject).count()
             
-            # Calculate attendance directly from AttendanceRecord (source of truth)
-            attendance_stats = AttendanceRecord.objects.filter(
+            data = StudentAttendancePercentage.objects.filter(
                 student=student,
-                class_session__subject=subject
-            ).aggregate(
-                attended=Count('id', filter=Q(status=True)),
-                total_marked=Count('id')
-            )
+                subject=subject
+            ).first()
 
-            attended = attendance_stats['attended'] or 0
-            # Calculate percentage based on total sessions (not just marked ones)
-            percentage = (attended / total_sessions * 100) if total_sessions > 0 else 0.0
+            percentage=data.attendancePercentage
 
-            # Get teacher name for the subject
-            teacher_subject = TeacherSubject.objects.filter(subject=subject).select_related('teacher_id').first()
-            teacher_name = teacher_subject.teacher_id.name if teacher_subject else "N/A"
+            teacher = TeacherSubject.objects.filter(subject=subject).select_related('teacher_id').first()
+            teacher_name = teacher.teacher_id.name if teacher else "N/A"
 
             subjects_data.append({
                 "id": subject.id,
@@ -715,11 +706,10 @@ def get_student_dashboard(request, *args, **kwargs):
                 "code": subject.code,
                 "teacher": teacher_name,
                 "total": total_sessions,
-                "attended": attended,
+                "attended": data.present_count,
                 "percentage": round(float(percentage), 2)
             })
 
-        # Get recent attendance activity (last 5 records)
         recent_records = AttendanceRecord.objects.filter(
             student=student
         ).select_related('class_session__subject').order_by('-class_session__class_datetime')[:5]
@@ -745,7 +735,6 @@ def get_student_dashboard(request, *args, **kwargs):
             {"detail": "Something went wrong"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
 
 @api_view(["POST"])
 def update_notification_token(request, *args, **kwargs):
