@@ -95,6 +95,11 @@ def validateStudent(request, *args, **kwargs):
 
     try:
         student = Student.objects.get(prn=prn)
+        if student.password_hash is None:
+            return Response(
+                {"detail": "User not registered. Please complete your registration first."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         if not check_password(password, student.password_hash):
             return Response(
                 {"detail": "Invalid password"}, status=status.HTTP_400_BAD_REQUEST
@@ -792,6 +797,179 @@ def remove_notification_token(request, *args, **kwargs):
             {"message": "Notification token removed successfully"},
             status=status.HTTP_200_OK,
         )
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+@api_view(["POST"])
+def get_student_profile(request, *args, **kwargs):
+    """
+    Fetches student profile with email, department, semester, and overall stats.
+    Expects: student_id
+    """
+    try:
+        student_id = request.data.get("student_id")
+
+        if student_id is None:
+            return Response(
+                {"detail": "student_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        student = get_object_or_404(Student, id=student_id)
+
+        # Calculate overall attendance stats
+        enrollments = StudentEnrollment.objects.filter(student_prn=student.prn)
+        
+        total_classes = 0
+        total_attended = 0
+        
+        for enrollment in enrollments:
+            subject_sessions = ClassSession.objects.filter(subject=enrollment.subject).count()
+            total_classes += subject_sessions
+            
+            attendance_data = StudentAttendancePercentage.objects.filter(
+                student=student,
+                subject=enrollment.subject
+            ).first()
+            
+            if attendance_data:
+                total_attended += attendance_data.present_count
+
+        overall_percentage = (total_attended / total_classes * 100) if total_classes > 0 else 0.0
+
+        # Calculate semester based on year
+        semester_map = {
+            1: "1st Semester",
+            2: "3rd Semester",
+            3: "5th Semester",
+            4: "7th Semester"
+        }
+        semester = semester_map.get(student.year, f"{student.year}th Year")
+
+        return Response({
+            "email": student.email,
+            "department": student.department.name,
+            "semester": semester,
+            "attendance_percentage": round(overall_percentage, 2),
+            "total_classes": total_classes
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+def get_student_attendance_history(request, *args, **kwargs):
+    """
+    Fetches attendance history for a student within a date range.
+    Expects: student_id, start_date (optional), end_date (optional)
+    """
+    try:
+        student_id = request.data.get("student_id")
+        start_date = request.data.get("start_date")
+        end_date = request.data.get("end_date")
+
+        if student_id is None:
+            return Response(
+                {"detail": "student_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        student = get_object_or_404(Student, id=student_id)
+
+        # Build query
+        query = Q(student=student)
+        
+        if start_date:
+            try:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                query &= Q(class_session__class_datetime__gte=start_dt)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid start_date format. Use ISO 8601"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        
+        if end_date:
+            try:
+                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                query &= Q(class_session__class_datetime__lte=end_dt)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid end_date format. Use ISO 8601"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Fetch attendance records
+        records = AttendanceRecord.objects.filter(query).select_related(
+            'class_session__subject'
+        ).order_by('-class_session__class_datetime')
+
+        attendance_records = []
+        for record in records:
+            attendance_records.append({
+                "date": record.class_session.class_datetime.strftime("%Y-%m-%d"),
+                "subject_name": record.class_session.subject.name,
+                "status": "Present" if record.status else "Absent",
+                "time": record.class_session.class_datetime.strftime("%I:%M %p")
+            })
+
+        return Response({
+            "attendance_records": attendance_records
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+def get_subject_attendance_details(request, *args, **kwargs):
+    """
+    Fetches detailed attendance records for a specific subject and student.
+    Expects: student_id, subject_id
+    """
+    try:
+        student_id = request.data.get("student_id")
+        subject_id = request.data.get("subject_id")
+
+        if not student_id or not subject_id:
+            return Response(
+                {"detail": "student_id and subject_id are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        student = get_object_or_404(Student, id=student_id)
+        subject = get_object_or_404(Subject, id=subject_id)
+
+        # Fetch attendance records for this subject
+        records = AttendanceRecord.objects.filter(
+            student=student,
+            class_session__subject=subject
+        ).select_related('class_session').order_by('-class_session__class_datetime')
+
+        attendance_records = []
+        for record in records:
+            attendance_records.append({
+                "date": record.class_session.class_datetime.isoformat(),
+                "status": "Present" if record.status else "Absent"
+            })
+
+        return Response({
+            "attendance_records": attendance_records
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
         traceback.print_exc()
