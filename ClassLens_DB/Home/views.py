@@ -95,6 +95,11 @@ def validateStudent(request, *args, **kwargs):
 
     try:
         student = Student.objects.get(prn=prn)
+        if student.password_hash is None:
+            return Response(
+                {"detail": "User not registered. Please complete your registration first."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         if not check_password(password, student.password_hash):
             return Response(
                 {"detail": "Invalid password"}, status=status.HTTP_400_BAD_REQUEST
@@ -234,7 +239,16 @@ def send_otp(request, *args, **kwargs):
         <strong>The ClassLens Team</strong></p>
         """
 
-        email_client = EmailClient.from_connection_string(env("CONNECTION_STRING"))
+        try:
+            connection_string = env("CONNECTION_STRING")
+            email_client = EmailClient.from_connection_string(connection_string)
+        except Exception as config_error:
+            print(f"Email configuration error: {config_error}")
+            traceback.print_exc()
+            return Response(
+                {"detail": "Email service configuration error. Please contact administrator."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         message = {
             "content": {
@@ -246,16 +260,27 @@ def send_otp(request, *args, **kwargs):
             "senderAddress": "DoNotReply@5e413bf2-7085-4332-af0d-80905f679aac.azurecomm.net",
         }
 
-        poller = email_client.begin_send(message)
-        if poller.result()["status"] == "Succeeded":
-            return Response({"message": "OTP sent successfully"}, status=200)
-        else:
-            return Response({"message": "Failed to send OTP"}, status=500)
+        try:
+            poller = email_client.begin_send(message)
+            result = poller.result()
+            if result["status"] == "Succeeded":
+                return Response({"message": "OTP sent successfully"}, status=200)
+            else:
+                print(f"Email send failed with status: {result['status']}")
+                return Response({"message": "Failed to send OTP"}, status=500)
+        except Exception as send_error:
+            print(f"Email send error: {send_error}")
+            traceback.print_exc()
+            return Response(
+                {"detail": "Failed to send OTP email. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     except Exception as e:
+        print(f"Unexpected error in send_otp: {e}")
         traceback.print_exc()
         return Response(
-            {"detail": "Method not allowed"},
+            {"detail": "An error occurred while processing your request"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -364,6 +389,7 @@ def verify_otp(request, *args, **kwargs):
         )
 
 @api_view(["POST"])
+@parser_classes([MultiPartParser])
 def set_password(request, *args, **kwargs):
     try:
         password = request.data.get("password")
@@ -392,12 +418,36 @@ def set_password(request, *args, **kwargs):
                 )
             
             student = Student.objects.filter(prn=prn).first()
-            if student : 
+            if student:
+                # Check if photo was uploaded
+                photo = request.FILES.get("photo")
+                if not photo:
+                    return Response(
+                        {"error": "Photo is required for student registration"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Set password
                 student.password_hash = make_password(password)
-                try : 
-                    student.face_embedding=registerNewStudent(request.FILES.get("photo"))
-                except ValueError as ve :
-                    return Response({"error": "Face Not Detected, Upload A New Image"}, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Process face embedding
+                try:
+                    face_embedding = registerNewStudent(photo)
+                    student.face_embedding = face_embedding
+                except ValueError as ve:
+                    print(f"Face detection error: {ve}")
+                    return Response(
+                        {"error": str(ve)}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                except Exception as e:
+                    print(f"Error processing face embedding: {e}")
+                    traceback.print_exc()
+                    return Response(
+                        {"error": "Error processing face image. Please try again with a clear photo."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
                 student.save()
                 print("Student password set successfully")
                 return Response({"message": "Student password set successfully"}, status=200)
@@ -412,16 +462,21 @@ def set_password(request, *args, **kwargs):
         )
     
 def registerNewStudent(photo):
-
+    """
+    Process student photo and extract face embedding.
+    Raises ValueError if no face is detected or photo is invalid.
+    Returns: face embedding array
+    """
     if not photo:
-        return Response(
-            {"error": "No photo uploaded"}, status=status.HTTP_400_BAD_REQUEST
-        )
+        raise ValueError("No photo uploaded")
 
     try:
         image = Image.open(photo)
         image = image.convert("RGB")
         img_arr = np.array(image)
+        
+        print(f"Processing face embedding for image with shape: {img_arr.shape}")
+        
         image_embedding = DeepFace.represent(
             img_path=img_arr,
             model_name="Facenet512",
@@ -429,9 +484,15 @@ def registerNewStudent(photo):
             enforce_detection=True,
         )[0]["embedding"]
 
+        print(f"Successfully extracted face embedding with {len(image_embedding)} features")
         return image_embedding
+        
     except ValueError as ve:
-        return ValueError(ve)
+        print(f"Face detection failed: {ve}")
+        raise ValueError(f"Face detection failed: {str(ve)}")
+    except Exception as e:
+        print(f"Error processing image: {e}")
+        raise ValueError(f"Error processing image: {str(e)}")
 
 @api_view(["POST"])
 def get_student_attendance(request, *args, **kwargs):
@@ -679,8 +740,28 @@ def get_student_dashboard(request, *args, **kwargs):
                 {"detail": "student_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        
+        # Validate student_id is a positive integer
+        try:
+            student_id = int(student_id)
+            if student_id <= 0:
+                return Response(
+                    {"detail": "Invalid student ID"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "Invalid student ID"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        student = get_object_or_404(Student, id=student_id)
+        try:
+            student = Student.objects.get(id=student_id)
+        except Student.DoesNotExist:
+            return Response(
+                {"detail": "Student not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         enrollments = StudentEnrollment.objects.filter(student_prn=student.prn).select_related('subject')
 
@@ -695,7 +776,13 @@ def get_student_dashboard(request, *args, **kwargs):
                 subject=subject
             ).first()
 
-            percentage=data.attendancePercentage
+            # Handle case when student has no attendance data yet
+            if data:
+                percentage = data.attendancePercentage
+                attended = data.present_count
+            else:
+                percentage = 0.0
+                attended = 0
 
             teacher = TeacherSubject.objects.filter(subject=subject).select_related('teacher_id').first()
             teacher_name = teacher.teacher_id.name if teacher else "N/A"
@@ -706,7 +793,7 @@ def get_student_dashboard(request, *args, **kwargs):
                 "code": subject.code,
                 "teacher": teacher_name,
                 "total": total_sessions,
-                "attended": data.present_count,
+                "attended": attended,
                 "percentage": round(float(percentage), 2)
             })
 
@@ -792,6 +879,294 @@ def remove_notification_token(request, *args, **kwargs):
             {"message": "Notification token removed successfully"},
             status=status.HTTP_200_OK,
         )
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+@api_view(["POST"])
+def get_student_profile(request, *args, **kwargs):
+    """
+    Fetches student profile with email, department, semester, and overall stats.
+    Expects: student_id
+    """
+    try:
+        student_id = request.data.get("student_id")
+
+        if student_id is None:
+            return Response(
+                {"detail": "student_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Validate student_id is a positive integer
+        try:
+            student_id = int(student_id)
+            if student_id <= 0:
+                return Response(
+                    {"detail": "Invalid student ID"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "Invalid student ID"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            student = Student.objects.get(id=student_id)
+        except Student.DoesNotExist:
+            return Response(
+                {"detail": "Student not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Calculate overall attendance stats
+        enrollments = StudentEnrollment.objects.filter(student_prn=student.prn)
+        
+        total_classes = 0
+        total_attended = 0
+        
+        for enrollment in enrollments:
+            subject_sessions = ClassSession.objects.filter(subject=enrollment.subject).count()
+            total_classes += subject_sessions
+            
+            attendance_data = StudentAttendancePercentage.objects.filter(
+                student=student,
+                subject=enrollment.subject
+            ).first()
+            
+            if attendance_data:
+                total_attended += attendance_data.present_count
+
+        overall_percentage = (total_attended / total_classes * 100) if total_classes > 0 else 0.0
+
+        # Calculate semester based on year
+        semester_map = {
+            1: "1st Semester",
+            2: "3rd Semester",
+            3: "5th Semester",
+            4: "7th Semester"
+        }
+        semester = semester_map.get(student.year, f"{student.year}th Year")
+
+        return Response({
+            "email": student.email,
+            "department": student.department.name,
+            "semester": semester,
+            "attendance_percentage": round(overall_percentage, 2),
+            "total_classes": total_classes
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+def get_student_attendance_history(request, *args, **kwargs):
+    """
+    Fetches attendance history for a student within a date range.
+    Expects: student_id, start_date (required), end_date (required)
+    """
+    try:
+        student_id = request.data.get("student_id")
+        start_date = request.data.get("start_date")
+        end_date = request.data.get("end_date")
+
+        if student_id is None:
+            return Response(
+                {"detail": "student_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Validate student_id is a positive integer
+        try:
+            student_id = int(student_id)
+            if student_id <= 0:
+                return Response(
+                    {"detail": "Invalid student ID"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "Invalid student ID"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            student = Student.objects.get(id=student_id)
+        except Student.DoesNotExist:
+            return Response(
+                {"detail": "Student not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        # Validate dates are required
+        if not start_date or not end_date:
+            return Response(
+                {"detail": "Start date and end date are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Parse and validate dates
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        except ValueError:
+            return Response(
+                {"detail": "Invalid start_date format. Use ISO 8601"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        try:
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError:
+            return Response(
+                {"detail": "Invalid end_date format. Use ISO 8601"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Validate date range
+        if end_dt < start_dt:
+            return Response(
+                {"detail": "End date must be after start date"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Validate dates are not in the future
+        from django.utils import timezone
+        current_time = timezone.now()
+        if start_dt > current_time or end_dt > current_time:
+            return Response(
+                {"detail": "Dates cannot be in the future"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Build query
+        query = Q(student=student)
+        query &= Q(class_session__class_datetime__gte=start_dt)
+        query &= Q(class_session__class_datetime__lte=end_dt)
+
+        # Fetch attendance records
+        records = AttendanceRecord.objects.filter(query).select_related(
+            'class_session__subject'
+        ).order_by('-class_session__class_datetime')
+
+        attendance_records = []
+        for record in records:
+            attendance_records.append({
+                "date": record.class_session.class_datetime.strftime("%Y-%m-%d"),
+                "subject_name": record.class_session.subject.name,
+                "status": "Present" if record.status else "Absent",
+                "time": record.class_session.class_datetime.strftime("%I:%M %p")
+            })
+
+        return Response({
+            "attendance_records": attendance_records
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response(
+            {"detail": "Something went wrong"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+def get_subject_attendance_details(request, *args, **kwargs):
+    """
+    Fetches detailed attendance records for a specific subject and student.
+    Expects: student_id, subject_id
+    """
+    try:
+        student_id = request.data.get("student_id")
+        subject_id = request.data.get("subject_id")
+
+        if not student_id or not subject_id:
+            return Response(
+                {"detail": "student_id and subject_id are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Validate student_id is a positive integer
+        try:
+            student_id = int(student_id)
+            if student_id <= 0:
+                return Response(
+                    {"detail": "Invalid student ID"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "Invalid student ID"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Validate subject_id is a positive integer
+        try:
+            subject_id = int(subject_id)
+            if subject_id <= 0:
+                return Response(
+                    {"detail": "Invalid subject ID"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "Invalid subject ID"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            student = Student.objects.get(id=student_id)
+        except Student.DoesNotExist:
+            return Response(
+                {"detail": "Student not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        try:
+            subject = Subject.objects.get(id=subject_id)
+        except Subject.DoesNotExist:
+            return Response(
+                {"detail": "Subject not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        # Verify student is enrolled in the subject
+        enrollment = StudentEnrollment.objects.filter(
+            student_prn=student.prn,
+            subject=subject
+        ).first()
+        
+        if not enrollment:
+            return Response(
+                {"detail": "Student is not enrolled in this subject"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Fetch attendance records for this subject
+        records = AttendanceRecord.objects.filter(
+            student=student,
+            class_session__subject=subject
+        ).select_related('class_session').order_by('-class_session__class_datetime')
+
+        attendance_records = []
+        for record in records:
+            attendance_records.append({
+                "date": record.class_session.class_datetime.isoformat(),
+                "status": "Present" if record.status else "Absent"
+            })
+
+        return Response({
+            "attendance_records": attendance_records
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
         traceback.print_exc()

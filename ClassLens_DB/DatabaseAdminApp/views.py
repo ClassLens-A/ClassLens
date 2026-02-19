@@ -222,7 +222,7 @@ class StudentViewSet(viewsets.ModelViewSet):
                         'prn': int(row['prn']),
                         'name': row['name'],
                         'email': row['email'],
-                        'password_hash': make_password(row.get('password', 'student123')),
+                        'password_hash': make_password(row['password']) if pd.notna(row.get('password')) else None,
                         'year': int(row['year']),
                         'department': department
                     }

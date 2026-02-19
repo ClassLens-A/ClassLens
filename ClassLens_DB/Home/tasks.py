@@ -36,8 +36,11 @@ torch.load = patched_torch_load
 from gfpgan import GFPGANer
 from .models import Student, AttendanceRecord, ClassSession, StudentEnrollment, StudentAttendancePercentage
 
+# Get model path from settings/env variable, with fallback
+gfpgan_model_path = getattr(settings, 'GFPGAN_MODEL_PATH', 'GFPGANv1.4.pth')
+
 restorer = GFPGANer(
-    model_path='GFPGANv1.4.pth',
+    model_path=gfpgan_model_path,
     upscale=2,
     arch='clean',
     channel_multiplier=2,
