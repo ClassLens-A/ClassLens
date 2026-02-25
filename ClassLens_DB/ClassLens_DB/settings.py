@@ -31,7 +31,12 @@ SECRET_KEY = "django-insecure-x3zih9=91am0f(gkv&16y+n%7i1b91e-^mh&v*_r=_kz@y7t04
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    '14.139.121.110',
+    'localhost',
+    '127.0.0.1',
+    '172.25.13.31'
+]
 
 
 # Application definition
@@ -173,7 +178,7 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 # Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = env('EMAIL_HOST')  # e.g., 'smtp.gmail.com' for Gmail
-EMAIL_PORT = env('EMAIL_PORT', default=587)  # 587 for TLS, 465 for SSL
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)  # 587 for TLS, 465 for SSL
 EMAIL_USE_TLS = True  # Use False if using SSL (port 465)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER')  # Your email address
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')  # Your email password/app password
